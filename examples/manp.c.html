@@ -1,0 +1,1427 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="../layout/vis.css" />
+<script type="text/javascript" src="../layout/jquery-1.9.1.js"></script>
+<script type="text/javascript" src="../layout/vis.js"></script>
+<script type="text/javascript">
+<!--
+$(document).ready(function() { $('span.fold_off').hide(); })
+// -->
+</script>
+</head>
+<body>
+&nbsp;&nbsp;&nbsp;1 /*<br />
+&nbsp;&nbsp;&nbsp;2  * manp.c: Manpath calculations<br />
+&nbsp;&nbsp;&nbsp;3  *<br />
+&nbsp;&nbsp;&nbsp;4  * Copyright (C) 1990, 1991 John W. Eaton.<br />
+&nbsp;&nbsp;&nbsp;5  * Copyright (C) 1994, 1995 Graeme W. Wilford. (Wilf.)<br />
+&nbsp;&nbsp;&nbsp;6  * Copyright (C) 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011,<br />
+&nbsp;&nbsp;&nbsp;7  *               2012 Colin Watson.<br />
+&nbsp;&nbsp;&nbsp;8  *<br />
+&nbsp;&nbsp;&nbsp;9  * This file is part of man-db.<br />
+&nbsp;&nbsp;10  *<br />
+&nbsp;&nbsp;11  * man-db is free software; you can redistribute it and/or modify it<br />
+&nbsp;&nbsp;12  * under the terms of the GNU General Public License as published by<br />
+&nbsp;&nbsp;13  * the Free Software Foundation; either version 2 of the License, or<br />
+&nbsp;&nbsp;14  * (at your option) any later version.<br />
+&nbsp;&nbsp;15  *<br />
+&nbsp;&nbsp;16  * man-db is distributed in the hope that it will be useful, but<br />
+&nbsp;&nbsp;17  * WITHOUT ANY WARRANTY; without even the implied warranty of<br />
+&nbsp;&nbsp;18  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the<br />
+&nbsp;&nbsp;19  * GNU General Public License <span class='for'>for</span> more details.<br />
+&nbsp;&nbsp;20  *<br />
+&nbsp;&nbsp;21  * You should have received a copy of the GNU General Public License<br />
+&nbsp;&nbsp;22  * along with man-db; <span class='if'>if</span> not, write to the Free Software Foundation,<br />
+&nbsp;&nbsp;23  * Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA<br />
+&nbsp;&nbsp;24  *<br />
+&nbsp;&nbsp;25  * John W. Eaton<br />
+&nbsp;&nbsp;26  * jwe@che.utexas.edu<br />
+&nbsp;&nbsp;27  * Department of Chemical Engineering<br />
+&nbsp;&nbsp;28  * The University of Texas at Austin<br />
+&nbsp;&nbsp;29  * Austin, Texas  78712<br />
+&nbsp;&nbsp;30  *<br />
+&nbsp;&nbsp;31  * unpack_locale_bits is derived from _nl_explode_name in libintl:<br />
+&nbsp;&nbsp;32  * Copyright (C) 1995-1998, 2000-2001, 2003, 2005 Free Software Foundation,<br />
+&nbsp;&nbsp;33  * Inc.<br />
+&nbsp;&nbsp;34  * Contributed by Ulrich Drepper &lt;drepper@gnu.ai.mit.edu&gt;, 1995.<br />
+&nbsp;&nbsp;35  * This was originally LGPL v2 or later, but I (Colin Watson) hereby<br />
+&nbsp;&nbsp;36  * exercise my option under section 3 of LGPL v2 to distribute it under the<br />
+&nbsp;&nbsp;37  * GPL v2 or later as above.<br />
+&nbsp;&nbsp;38  *<br />
+&nbsp;&nbsp;39  * Wed May  4 15:44:47 BST 1994 Wilf. (G.Wilford@ee.surrey.ac.uk): changes<br />
+&nbsp;&nbsp;40  * to get_dirlist() and manpath().<br />
+&nbsp;&nbsp;41  *<br />
+&nbsp;&nbsp;42  * This whole code segment is unfriendly and could <span class='do'>do</span> with a complete <br />
+&nbsp;&nbsp;43  * overhaul.<br />
+&nbsp;&nbsp;44  */<br />
+&nbsp;&nbsp;45 <br />
+&nbsp;&nbsp;46 <span class='ifdef'>#ifdef</span> HAVE_CONFIG_H<br />
+&nbsp;&nbsp;47 #  include <span class='str_literal'>"config.h"</span><br />
+&nbsp;&nbsp;48 <span class='endif'>#endif</span> /* HAVE_CONFIG_H */<br />
+&nbsp;&nbsp;49 <br />
+&nbsp;&nbsp;50 <span class='include'>#include</span> &lt;stdio.h&gt;<br />
+&nbsp;&nbsp;51 <span class='include'>#include</span> &lt;ctype.h&gt;<br />
+&nbsp;&nbsp;52 <span class='include'>#include</span> &lt;sys/types.h&gt;<br />
+&nbsp;&nbsp;53 <span class='include'>#include</span> &lt;sys/stat.h&gt;<br />
+&nbsp;&nbsp;54 <span class='include'>#include</span> &lt;assert.h&gt;<br />
+&nbsp;&nbsp;55 <span class='include'>#include</span> &lt;errno.h&gt;<br />
+&nbsp;&nbsp;56 <span class='include'>#include</span> &lt;dirent.h&gt;<br />
+&nbsp;&nbsp;57 <span class='include'>#include</span> &lt;stdlib.h&gt;<br />
+&nbsp;&nbsp;58 <span class='include'>#include</span> &lt;string.h&gt;<br />
+&nbsp;&nbsp;59 <span class='include'>#include</span> &lt;unistd.h&gt;<br />
+&nbsp;&nbsp;60 <br />
+&nbsp;&nbsp;61 <span class='include'>#include</span> <span class='str_literal'>"canonicalize.h"</span><br />
+&nbsp;&nbsp;62 <span class='include'>#include</span> <span class='str_literal'>"xgetcwd.h"</span><br />
+&nbsp;&nbsp;63 <span class='include'>#include</span> <span class='str_literal'>"xvasprintf.h"</span><br />
+&nbsp;&nbsp;64 <br />
+&nbsp;&nbsp;65 <span class='include'>#include</span> <span class='str_literal'>"gettext.h"</span><br />
+&nbsp;&nbsp;66 <span class='define'>#define</span> _(String) gettext (String)<br />
+&nbsp;&nbsp;67 <br />
+&nbsp;&nbsp;68 <span class='include'>#include</span> <span class='str_literal'>"manconfig.h"</span><br />
+&nbsp;&nbsp;69 <br />
+&nbsp;&nbsp;70 <span class='include'>#include</span> <span class='str_literal'>"error.h"</span><br />
+&nbsp;&nbsp;71 <span class='include'>#include</span> <span class='str_literal'>"cleanup.h"</span><br />
+&nbsp;&nbsp;72 <br />
+&nbsp;&nbsp;73 <span class='ifdef'>#ifdef</span> SECURE_MAN_UID<br />
+&nbsp;&nbsp;74 # include <span class='str_literal'>"security.h"</span><br />
+&nbsp;&nbsp;75 #endif<br />
+&nbsp;&nbsp;76 <br />
+&nbsp;&nbsp;77 <span class='include'>#include</span> <span class='str_literal'>"manp.h"</span><br />
+&nbsp;&nbsp;78 <span class='include'>#include</span> <span class='str_literal'>"globbing.h"</span><br />
+&nbsp;&nbsp;79 <br />
+&nbsp;&nbsp;80 <span class='struct'>struct</span> list {<br />
+&nbsp;&nbsp;81 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *key;<br />
+&nbsp;&nbsp;82 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *cont;<br />
+&nbsp;&nbsp;83 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> flag;<br />
+&nbsp;&nbsp;84 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *next;<br />
+&nbsp;&nbsp;85 };<br />
+&nbsp;&nbsp;86 <br />
+&nbsp;&nbsp;87 <span class='static'>static</span> <span class='struct'>struct</span> list *namestore, *tailstore;<br />
+&nbsp;&nbsp;88 <br />
+&nbsp;&nbsp;89 <span class='define'>#define</span> SECTION_USER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-6<br />
+&nbsp;&nbsp;90 <span class='define'>#define</span> SECTION&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-5<br />
+&nbsp;&nbsp;91 <span class='define'>#define</span> DEFINE_USER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-4<br />
+&nbsp;&nbsp;92 <span class='define'>#define</span> DEFINE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-3<br />
+&nbsp;&nbsp;93 <span class='define'>#define</span> MANDB_MAP_USER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-2<br />
+&nbsp;&nbsp;94 <span class='define'>#define</span> MANDB_MAP&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-1<br />
+&nbsp;&nbsp;95 <span class='define'>#define</span> MANPATH_MAP&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0<br />
+&nbsp;&nbsp;96 <span class='define'>#define</span> MANDATORY&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1<br />
+&nbsp;&nbsp;97 <br />
+&nbsp;&nbsp;98 /* DIRLIST list[MAXDIRS]; */<br />
+&nbsp;&nbsp;99 <span class='static'>static</span> <span class='char'>char</span> *tmplist[MAXDIRS];<br />
+&nbsp;100 <br />
+&nbsp;101 <span class='char'>char</span> *user_config_file = NULL;<br />
+&nbsp;102 <span class='int'>int</span> disable_cache;<br />
+&nbsp;103 <span class='int'>int</span> min_cat_width = 80, max_cat_width = 80, cat_width = 0;<br />
+&nbsp;104 <br />
+&nbsp;105 <span class='static'>static</span> inline <span class='char'>char</span> *has_mandir (const <span class='char'>char</span> *p);<br />
+&nbsp;106 <span class='static'>static</span> inline <span class='char'>char</span> *fsstnd (const <span class='char'>char</span> *path);<br />
+&nbsp;107 <span class='static'>static</span> <span class='char'>char</span> *def_path (int flag);<br />
+&nbsp;108 <span class='static'>static</span> <span class='void'>void</span> add_dir_to_list (char **lp, <span class='const'>const</span> <span class='char'>char</span> *dir);<br />
+&nbsp;109 <span class='static'>static</span> <span class='char'>char</span> **add_dir_to_path_list (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p);<br />
+&nbsp;110 <br />
+&nbsp;111 <br />
+&nbsp;112 <span class='static'>static</span> <span class='void'>void</span> add_to_list (const <span class='char'>char</span> *key, <span class='const'>const</span> <span class='char'>char</span> *cont, <span class='int'>int</span> flag)<br />
+&nbsp;113 {<br />
+&nbsp;114 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list = XMALLOC (struct list);<br />
+&nbsp;115 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;list-&gt;key = xstrdup (key);<br />
+&nbsp;116 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;list-&gt;cont = xstrdup (cont);<br />
+&nbsp;117 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;list-&gt;flag = flag;<br />
+&nbsp;118 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;list-&gt;next = NULL;<br />
+&nbsp;119 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (tailstore)<br />
+&nbsp;120 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tailstore-&gt;next = list;<br />
+&nbsp;121 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tailstore = list;<br />
+&nbsp;122 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!namestore)<br />
+&nbsp;123 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;namestore = list;<br />
+&nbsp;124 }<br />
+&nbsp;125 <br />
+&nbsp;126 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> *get_from_list (const <span class='char'>char</span> *key, <span class='int'>int</span> flag)<br />
+&nbsp;127 {<br />
+&nbsp;128 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+&nbsp;129 <br />
+&nbsp;130 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;131 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (flag == list-&gt;flag &amp;&amp; STREQ (key, list-&gt;key))<br />
+&nbsp;132 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> list-&gt;cont;<br />
+&nbsp;133 <br />
+&nbsp;134 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+&nbsp;135 }<br />
+&nbsp;136 <br />
+&nbsp;137 <span class='static'>static</span> <span class='struct'>struct</span> list *iterate_over_list (struct list *prev, <span class='char'>char</span> *key, <span class='int'>int</span> flag)<br />
+&nbsp;138 {<br />
+&nbsp;139 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+&nbsp;140 <br />
+&nbsp;141 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = prev ? prev-&gt;next : namestore; list; list = list-&gt;next)<br />
+&nbsp;142 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (flag == list-&gt;flag &amp;&amp; STREQ (key, list-&gt;key))<br />
+&nbsp;143 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> list;<br />
+&nbsp;144 <br />
+&nbsp;145 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+&nbsp;146 }<br />
+&nbsp;147 <br />
+&nbsp;148 <span class='ifdef'>#ifdef</span> SECURE_MAN_UID<br />
+&nbsp;149 /* Must not <span class='return'>return</span> DEFINEs set in ~/.manpath. This is used to fetch<br />
+&nbsp;150  * definitions used in raised-privilege code; <span class='if'>if</span> in doubt, be conservative!<br />
+&nbsp;151  *<br />
+&nbsp;152  * If not setuid, this is identical to get_def_user.<br />
+&nbsp;153  */<br />
+&nbsp;154 <span class='const'>const</span> <span class='char'>char</span> *get_def (const <span class='char'>char</span> *thing, <span class='const'>const</span> <span class='char'>char</span> *def)<br />
+&nbsp;155 {<br />
+&nbsp;156 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *config_def;<br />
+&nbsp;157 <br />
+&nbsp;158 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!running_setuid ())<br />
+&nbsp;159 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> get_def_user (thing, def);<br />
+&nbsp;160 <br />
+&nbsp;161 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config_def = get_from_list (thing, DEFINE);<br />
+&nbsp;162 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> config_def ? config_def : def;<br />
+&nbsp;163 }<br />
+&nbsp;164 #endif<br />
+&nbsp;165 <br />
+&nbsp;166 <span class='const'>const</span> <span class='char'>char</span> *get_def_user (const <span class='char'>char</span> *thing, <span class='const'>const</span> <span class='char'>char</span> *def)<br />
+&nbsp;167 {<br />
+&nbsp;168 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *config_def = get_from_list (thing, DEFINE_USER);<br />
+&nbsp;169 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!config_def)<br />
+&nbsp;170 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config_def = get_from_list (thing, DEFINE);<br />
+&nbsp;171 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> config_def ? config_def : def;<br />
+&nbsp;172 }<br />
+&nbsp;173 <br />
+&nbsp;174 <span class='static'>static</span> <span class='void'>void</span> print_list (void)<br />
+&nbsp;175 {<br />
+&nbsp;176 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+&nbsp;177 <br />
+&nbsp;178 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;179 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"`%s<span class='str_literal'>'\t`%s'</span>\t`%d'\n"</span>,<br />
+&nbsp;180 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       list-&gt;key, list-&gt;cont, list-&gt;flag);<br />
+&nbsp;181 }<br />
+&nbsp;182 <br />
+&nbsp;183 <span class='static'>static</span> <span class='void'>void</span> add_sections (char *sections, <span class='int'>int</span> user)<br />
+&nbsp;184 {<br />
+&nbsp;185 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *section_list = xstrdup (sections);<br />
+&nbsp;186 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *sect;<br />
+&nbsp;187 <br />
+&nbsp;188 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (sect = strtok (section_list, <span class='str_literal'>" "</span>); sect;<br />
+&nbsp;189 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     sect = strtok (NULL, <span class='str_literal'>" "</span>)) {<br />
+&nbsp;190 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_list (sect, <span class='str_literal'>""</span>, user ? SECTION_USER : SECTION);<br />
+&nbsp;191 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"Added section `%s'.\n"</span>, sect);<br />
+&nbsp;192 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;193 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (section_list);<br />
+&nbsp;194 }<br />
+&nbsp;195 <br />
+&nbsp;196 <span class='const'>const</span> <span class='char'>char</span> **get_sections (void)<br />
+&nbsp;197 {<br />
+&nbsp;198 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+&nbsp;199 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> length_user = 0, length = 0;<br />
+&nbsp;200 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> **sections, **sectionp;<br />
+&nbsp;201 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> flag;<br />
+&nbsp;202 <br />
+&nbsp;203 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next) {<br />
+&nbsp;204 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == SECTION_USER)<br />
+&nbsp;205 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;length_user++;<br />
+&nbsp;206 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (list-&gt;flag == SECTION)<br />
+&nbsp;207 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;length++;<br />
+&nbsp;208 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;209 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (length_user) {<br />
+&nbsp;210 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sections = xnmalloc (length_user + 1, sizeof *sections);<br />
+&nbsp;211 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flag = SECTION_USER;<br />
+&nbsp;212 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;213 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sections = xnmalloc (length + 1, sizeof *sections);<br />
+&nbsp;214 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flag = SECTION;<br />
+&nbsp;215 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;216 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sectionp = sections;<br />
+&nbsp;217 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;218 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == flag)<br />
+&nbsp;219 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*sectionp++ = list-&gt;key;<br />
+&nbsp;220 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*sectionp = NULL;<br />
+&nbsp;221 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> sections;<br />
+&nbsp;222 }<br />
+&nbsp;223 <br />
+&nbsp;224 <span class='static'>static</span> <span class='void'>void</span> add_def (char *thing, <span class='char'>char</span> *config_def, <span class='int'>int</span> flag, <span class='int'>int</span> user)<br />
+&nbsp;225 {<br />
+&nbsp;226 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_list (thing, flag == 2 ? config_def : <span class='str_literal'>""</span>,<br />
+&nbsp;227 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     user ? DEFINE_USER : DEFINE);<br />
+&nbsp;228 <br />
+&nbsp;229 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"Defined `%s<span class='str_literal'>' as `%s'</span>.\n"</span>, thing, config_def);<br />
+&nbsp;230 }<br />
+&nbsp;231 <br />
+&nbsp;232 <span class='static'>static</span> <span class='void'>void</span> add_manpath_map (const <span class='char'>char</span> *path, <span class='const'>const</span> <span class='char'>char</span> *mandir)<br />
+&nbsp;233 {<br />
+&nbsp;234 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!path || !mandir)<br />
+&nbsp;235 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;236 <br />
+&nbsp;237 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_list (path, mandir, MANPATH_MAP);<br />
+&nbsp;238 <br />
+&nbsp;239 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"Path `%s<span class='str_literal'>' mapped to mandir `%s'</span>.\n"</span>, path, mandir);<br />
+&nbsp;240 }<br />
+&nbsp;241 <br />
+&nbsp;242 <span class='static'>static</span> <span class='void'>void</span> add_mandb_map (const <span class='char'>char</span> *mandir, <span class='const'>const</span> <span class='char'>char</span> *catdir,<br />
+&nbsp;243 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   <span class='int'>int</span> flag, <span class='int'>int</span> user)<br />
+&nbsp;244 {<br />
+&nbsp;245 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *tmpcatdir;<br />
+&nbsp;246 <br />
+&nbsp;247 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;assert (flag &gt; 0);<br />
+&nbsp;248 <br />
+&nbsp;249 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!mandir)<br />
+&nbsp;250 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;251 <br />
+&nbsp;252 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (flag == 1)<br />
+&nbsp;253 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmpcatdir = xstrdup (mandir);<br />
+&nbsp;254 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (STREQ (catdir, <span class='str_literal'>"FSSTND"</span>))<br />
+&nbsp;255 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmpcatdir = fsstnd (mandir);<br />
+&nbsp;256 <span class='else'>else</span><br />
+&nbsp;257 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmpcatdir = xstrdup (catdir);<br />
+&nbsp;258 <br />
+&nbsp;259 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!tmpcatdir)<br />
+&nbsp;260 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;261 <br />
+&nbsp;262 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_list (mandir, tmpcatdir, user ? MANDB_MAP_USER : MANDB_MAP);<br />
+&nbsp;263 <br />
+&nbsp;264 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"%s mandir `%s<span class='str_literal'>', catdir `%s'</span>.\n"</span>,<br />
+&nbsp;265 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       user ? <span class='str_literal'>"User"</span> : <span class='str_literal'>"Global"</span>, mandir, tmpcatdir);<br />
+&nbsp;266 <br />
+&nbsp;267 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (tmpcatdir);<br />
+&nbsp;268 }<br />
+&nbsp;269 <br />
+&nbsp;270 <span class='static'>static</span> <span class='void'>void</span> add_mandatory (const <span class='char'>char</span> *mandir)<br />
+&nbsp;271 {<br />
+&nbsp;272 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!mandir)<br />
+&nbsp;273 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;274 <br />
+&nbsp;275 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_list (mandir, <span class='str_literal'>""</span>, MANDATORY);<br />
+&nbsp;276 <br />
+&nbsp;277 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"Mandatory mandir `%s'.\n"</span>, mandir);<br />
+&nbsp;278 }<br />
+&nbsp;279 <br />
+&nbsp;280 /* accept (NULL or oldpath) and new path component. <span class='return'>return</span> new path */<br />
+&nbsp;281 <span class='static'>static</span> <span class='char'>char</span> *pathappend (char *oldpath, <span class='const'>const</span> <span class='char'>char</span> *appendage)<br />
+&nbsp;282 {<br />
+&nbsp;283 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;assert ((!oldpath || *oldpath) &amp;&amp; appendage);<br />
+&nbsp;284 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Remove duplicates */<br />
+&nbsp;285 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (oldpath) {<br />
+&nbsp;286 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *oldpathtok = xstrdup (oldpath), *tok;<br />
+&nbsp;287 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *app_dedup = xstrdup (appendage);<br />
+&nbsp;288 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *oldpathtok_ptr = oldpathtok;<br />
+&nbsp;289 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (tok = strsep (&amp;oldpathtok_ptr, <span class='str_literal'>":"</span>); tok;<br />
+&nbsp;290 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     tok = strsep (&amp;oldpathtok_ptr, <span class='str_literal'>":"</span>)) {<br />
+&nbsp;291 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *search;<br />
+&nbsp;292 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!*tok)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    /* ignore empty fields */<br />
+&nbsp;293 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;294 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;search = strstr (app_dedup, tok);<br />
+&nbsp;295 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (search) {<br />
+&nbsp;296 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *terminator = search + strlen (tok);<br />
+&nbsp;297 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!*terminator) {<br />
+&nbsp;298 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* End of the string, so chop here. */<br />
+&nbsp;299 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*search = 0;<br />
+&nbsp;300 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (search &gt; app_dedup &amp;&amp;<br />
+&nbsp;301 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       *--search == <span class='str_literal'>':'</span>)<br />
+&nbsp;302 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*search = 0;<br />
+&nbsp;303 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+&nbsp;304 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> <span class='if'>if</span> (*terminator == <span class='str_literal'>':'</span>) {<br />
+&nbsp;305 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *newapp;<br />
+&nbsp;306 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*search = 0;<br />
+&nbsp;307 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newapp = xasprintf (<span class='str_literal'>"%s%s"</span>, app_dedup,<br />
+&nbsp;308 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    terminator + 1);<br />
+&nbsp;309 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (app_dedup);<br />
+&nbsp;310 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;app_dedup = newapp;<br />
+&nbsp;311 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;312 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;search = strstr (terminator, tok);<br />
+&nbsp;313 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;314 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;315 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (oldpathtok);<br />
+&nbsp;316 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!STREQ (appendage, app_dedup))<br />
+&nbsp;317 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"%s:%s reduced to %s%s%s\n"</span>,<br />
+&nbsp;318 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       oldpath, appendage,<br />
+&nbsp;319 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       oldpath, *app_dedup ? <span class='str_literal'>":"</span> : <span class='str_literal'>""</span>, app_dedup);<br />
+&nbsp;320 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*app_dedup)<br />
+&nbsp;321 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;oldpath = appendstr (oldpath, <span class='str_literal'>":"</span>, app_dedup, NULL);<br />
+&nbsp;322 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (app_dedup);<br />
+&nbsp;323 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> oldpath;<br />
+&nbsp;324 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;325 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (appendage);<br />
+&nbsp;326 }<br />
+&nbsp;327 <br />
+&nbsp;328 <span class='static'>static</span> inline <span class='void'>void</span> gripe_reading_mp_config (const <span class='char'>char</span> *file)<br />
+&nbsp;329 {<br />
+&nbsp;330 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (FAIL, 0,<br />
+&nbsp;331 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"can't make sense of the manpath configuration file %s"</span>),<br />
+&nbsp;332 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       file);<br />
+&nbsp;333 }<br />
+&nbsp;334 <br />
+&nbsp;335 <span class='static'>static</span> inline <span class='void'>void</span> gripe_stat_file (const <span class='char'>char</span> *file)<br />
+&nbsp;336 {<br />
+&nbsp;337 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug_error (_(<span class='str_literal'>"warning: %s"</span>), file);<br />
+&nbsp;338 }<br />
+&nbsp;339 <br />
+&nbsp;340 <span class='static'>static</span> inline <span class='void'>void</span> gripe_not_directory (const <span class='char'>char</span> *dir)<br />
+&nbsp;341 {<br />
+&nbsp;342 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;343 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: %s isn't a directory"</span>), dir);<br />
+&nbsp;344 }<br />
+&nbsp;345 <br />
+&nbsp;346 <span class='static'>static</span> <span class='void'>void</span> gripe_overlong_list (void)<br />
+&nbsp;347 {<br />
+&nbsp;348 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (FAIL, 0, _(<span class='str_literal'>"manpath list too long"</span>));<br />
+&nbsp;349 }<br />
+&nbsp;350 <br />
+&nbsp;351 /* accept a manpath list, separated with <span class='str_literal'>':'</span>, <span class='return'>return</span> the associated <br />
+&nbsp;352    catpath list */<br />
+&nbsp;353 <span class='char'>char</span> *cat_manpath (char *manp)<br />
+&nbsp;354 {<br />
+&nbsp;355 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *catp = NULL;<br />
+&nbsp;356 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *path, *catdir;<br />
+&nbsp;357 <br />
+&nbsp;358 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (path = strsep (&amp;manp, <span class='str_literal'>":"</span>); path; path = strsep (&amp;manp, <span class='str_literal'>":"</span>)) {<br />
+&nbsp;359 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catdir = get_from_list (path, MANDB_MAP_USER);<br />
+&nbsp;360 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!catdir)<br />
+&nbsp;361 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catdir = get_from_list (path, MANDB_MAP);<br />
+&nbsp;362 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catp = catdir ? pathappend (catp, catdir) <br />
+&nbsp;363 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      : pathappend (catp, path);<br />
+&nbsp;364 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;365 <br />
+&nbsp;366 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> catp;<br />
+&nbsp;367 }&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;368 <br />
+&nbsp;369 /* Unpack a glibc-style locale into its component parts.<br />
+&nbsp;370  *<br />
+&nbsp;371  * This function was inspired by _nl_explode_name in libintl; I've rewritten<br />
+&nbsp;372  * it here with extensive modifications in order not to require libintl or<br />
+&nbsp;373  * glibc internals, because this API is more convenient <span class='for'>for</span> man-db, and to<br />
+&nbsp;374  * be consistent with surrounding style. I also dropped the normalised<br />
+&nbsp;375  * codeset handling, which we don't need here.<br />
+&nbsp;376  */<br />
+&nbsp;377 <span class='void'>void</span> unpack_locale_bits (const <span class='char'>char</span> *locale, <span class='struct'>struct</span> locale_bits *bits)<br />
+&nbsp;378 {<br />
+&nbsp;379 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *p, *start;<br />
+&nbsp;380 <br />
+&nbsp;381 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;language = NULL;<br />
+&nbsp;382 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;territory = NULL;<br />
+&nbsp;383 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;codeset = NULL;<br />
+&nbsp;384 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;modifier = NULL;<br />
+&nbsp;385 <br />
+&nbsp;386 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Now we determine the single parts of the locale name. First look<br />
+&nbsp;387 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * <span class='for'>for</span> the language. Termination symbols are <span class='str_literal'>'_'</span>, <span class='str_literal'>'.'</span>, and <span class='str_literal'>'@'</span>.<br />
+&nbsp;388 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;389 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;p = locale;<br />
+&nbsp;390 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*p &amp;&amp; *p != <span class='str_literal'>'_'</span> &amp;&amp; *p != <span class='str_literal'>'.'</span> &amp;&amp; *p != <span class='str_literal'>'@'</span>)<br />
+&nbsp;391 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++p;<br />
+&nbsp;392 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (p == locale) {<br />
+&nbsp;393 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* This does not make sense: language has to be specified.<br />
+&nbsp;394 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * Use this entry as it is without exploding. Perhaps it is<br />
+&nbsp;395 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * an alias.<br />
+&nbsp;396 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;397 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;language = xstrdup (locale);<br />
+&nbsp;398 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto out;<br />
+&nbsp;399 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;400 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;language = xstrndup (locale, p - locale);<br />
+&nbsp;401 <br />
+&nbsp;402 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*p == <span class='str_literal'>'_'</span>) {<br />
+&nbsp;403 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Next is the territory. */<br />
+&nbsp;404 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;start = ++p;<br />
+&nbsp;405 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*p &amp;&amp; *p != <span class='str_literal'>'.'</span> &amp;&amp; *p != <span class='str_literal'>'@'</span>)<br />
+&nbsp;406 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++p;<br />
+&nbsp;407 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;territory = xstrndup (start, p - start);<br />
+&nbsp;408 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;409 <br />
+&nbsp;410 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*p == <span class='str_literal'>'.'</span>) {<br />
+&nbsp;411 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Next is the codeset. */<br />
+&nbsp;412 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;start = ++p;<br />
+&nbsp;413 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*p &amp;&amp; *p != <span class='str_literal'>'@'</span>)<br />
+&nbsp;414 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++p;<br />
+&nbsp;415 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;codeset = xstrndup (start, p - start);<br />
+&nbsp;416 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;417 <br />
+&nbsp;418 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*p == <span class='str_literal'>'@'</span>)<br />
+&nbsp;419 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Next is the modifier. */<br />
+&nbsp;420 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;modifier = xstrdup (++p);<br />
+&nbsp;421 <br />
+&nbsp;422 out:<br />
+&nbsp;423 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!bits-&gt;territory)<br />
+&nbsp;424 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;territory = xstrdup (<span class='str_literal'>""</span>);<br />
+&nbsp;425 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!bits-&gt;codeset)<br />
+&nbsp;426 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;codeset = xstrdup (<span class='str_literal'>""</span>);<br />
+&nbsp;427 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!bits-&gt;modifier)<br />
+&nbsp;428 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bits-&gt;modifier = xstrdup (<span class='str_literal'>""</span>);<br />
+&nbsp;429 }<br />
+&nbsp;430 <br />
+&nbsp;431 /* Free the contents of a locale_bits structure populated by<br />
+&nbsp;432  * unpack_locale_bits. Does not free the pointer argument.<br />
+&nbsp;433  */<br />
+&nbsp;434 <span class='void'>void</span> free_locale_bits (struct locale_bits *bits)<br />
+&nbsp;435 {<br />
+&nbsp;436 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (bits-&gt;language);<br />
+&nbsp;437 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (bits-&gt;territory);<br />
+&nbsp;438 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (bits-&gt;codeset);<br />
+&nbsp;439 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (bits-&gt;modifier);<br />
+&nbsp;440 }<br />
+&nbsp;441 <br />
+&nbsp;442 <br />
+&nbsp;443 <span class='static'>static</span> <span class='char'>char</span> *get_nls_manpath (const <span class='char'>char</span> *manpathlist, <span class='const'>const</span> <span class='char'>char</span> *locale)<br />
+&nbsp;444 {<br />
+&nbsp;445 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> locale_bits lbits;<br />
+&nbsp;446 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
+&nbsp;447 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpathlist_copy, *path, *manpathlist_ptr;<br />
+&nbsp;448 <br />
+&nbsp;449 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;unpack_locale_bits (locale, &amp;lbits);<br />
+&nbsp;450 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (lbits.language, <span class='str_literal'>"C"</span>) || STREQ (lbits.language, <span class='str_literal'>"POSIX"</span>)) {<br />
+&nbsp;451 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_locale_bits (&amp;lbits);<br />
+&nbsp;452 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (manpathlist);<br />
+&nbsp;453 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;454 <br />
+&nbsp;455 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist_copy = xstrdup (manpathlist);<br />
+&nbsp;456 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist_ptr = manpathlist_copy;<br />
+&nbsp;457 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (path = strsep (&amp;manpathlist_ptr, <span class='str_literal'>":"</span>); path;<br />
+&nbsp;458 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     path = strsep (&amp;manpathlist_ptr, <span class='str_literal'>":"</span>)) {<br />
+&nbsp;459 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DIR *mandir = opendir (path);<br />
+&nbsp;460 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> dirent *mandirent;<br />
+&nbsp;461 <br />
+&nbsp;462 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!mandir)<br />
+&nbsp;463 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;464 <br />
+&nbsp;465 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> ((mandirent = readdir (mandir)) != NULL) {<br />
+&nbsp;466 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *name;<br />
+&nbsp;467 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> locale_bits mbits;<br />
+&nbsp;468 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *fullpath;<br />
+&nbsp;469 <br />
+&nbsp;470 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name = mandirent-&gt;d_name;<br />
+&nbsp;471 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (name, <span class='str_literal'>"."</span>) || STREQ (name, <span class='str_literal'>".."</span>))<br />
+&nbsp;472 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;473 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STRNEQ (name, <span class='str_literal'>"man"</span>, 3))<br />
+&nbsp;474 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;475 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fullpath = xasprintf (<span class='str_literal'>"%s/%s"</span>, path, name);<br />
+&nbsp;476 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (is_directory (fullpath) != 1) {<br />
+&nbsp;477 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (fullpath);<br />
+&nbsp;478 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;479 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;480 <br />
+&nbsp;481 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;unpack_locale_bits (name, &amp;mbits);<br />
+&nbsp;482 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (lbits.language, mbits.language) &amp;&amp;<br />
+&nbsp;483 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    (!*mbits.territory ||<br />
+&nbsp;484 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     STREQ (lbits.territory, mbits.territory)) &amp;&amp;<br />
+&nbsp;485 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    (!*mbits.modifier ||<br />
+&nbsp;486 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     STREQ (lbits.modifier, mbits.modifier)))<br />
+&nbsp;487 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, fullpath);<br />
+&nbsp;488 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_locale_bits (&amp;mbits);<br />
+&nbsp;489 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (fullpath);<br />
+&nbsp;490 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;491 <br />
+&nbsp;492 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (lbits.language, <span class='str_literal'>"en"</span>))<br />
+&nbsp;493 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* For English, we look in the subdirectories as<br />
+&nbsp;494 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * above just in <span class='case'>case</span> there's something like<br />
+&nbsp;495 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * en_GB.UTF-8, but it's more probable that English<br />
+&nbsp;496 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * manual pages reside at the top level.<br />
+&nbsp;497 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;498 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, path);<br />
+&nbsp;499 <br />
+&nbsp;500 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;closedir (mandir);<br />
+&nbsp;501 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;502 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (manpathlist_copy);<br />
+&nbsp;503 <br />
+&nbsp;504 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_locale_bits (&amp;lbits);<br />
+&nbsp;505 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+&nbsp;506 }<br />
+&nbsp;507 <br />
+&nbsp;508 <span class='char'>char</span> *add_nls_manpaths (const <span class='char'>char</span> *manpathlist, <span class='const'>const</span> <span class='char'>char</span> *locales)<br />
+&nbsp;509 {<br />
+&nbsp;510 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
+&nbsp;511 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *locales_copy, *tok, *locales_ptr;<br />
+&nbsp;512 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *locale_manpath;<br />
+&nbsp;513 <br />
+&nbsp;514 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"add_nls_manpaths(): processing %s\n"</span>, manpathlist);<br />
+&nbsp;515 <br />
+&nbsp;516 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locales == NULL || *locales == <span class='str_literal'>'\0'</span>)<br />
+&nbsp;517 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (manpathlist);<br />
+&nbsp;518 <br />
+&nbsp;519 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* For each locale, we iterate over the manpath and find appropriate<br />
+&nbsp;520 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * locale directories <span class='for'>for</span> each item. We then concatenate the results<br />
+&nbsp;521 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * <span class='for'>for</span> all locales. In other words, LANGUAGE=fr:de and<br />
+&nbsp;522 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * manpath=/usr/share/man:/usr/local/share/man could result in<br />
+&nbsp;523 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * something like this list:<br />
+&nbsp;524 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *<br />
+&nbsp;525 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/share/man/fr<br />
+&nbsp;526 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/local/share/man/fr<br />
+&nbsp;527 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/share/man/de<br />
+&nbsp;528 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/local/share/man/de<br />
+&nbsp;529 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/share/man<br />
+&nbsp;530 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *   /usr/local/share/man<br />
+&nbsp;531 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *<br />
+&nbsp;532 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * This assumes that it's more important to have documentation in<br />
+&nbsp;533 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * the preferred language than to have documentation <span class='for'>for</span> the correct<br />
+&nbsp;534 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * object (in the <span class='case'>case</span> where there are different versions of a<br />
+&nbsp;535 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * program in different hierarchies, <span class='for'>for</span> example). It is not<br />
+&nbsp;536 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * entirely obvious that this is the right assumption, but on the<br />
+&nbsp;537 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * other hand the other choice is not entirely obvious either. We<br />
+&nbsp;538 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * tie-break on <span class='str_literal'>"we've always done it this way"</span>, and people can use<br />
+&nbsp;539 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * <span class='str_literal'>'man -a'</span> or whatever in the occasional <span class='case'>case</span> where we get it<br />
+&nbsp;540 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * wrong.<br />
+&nbsp;541 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *<br />
+&nbsp;542 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * We go to no special effort to de-duplicate directories here.<br />
+&nbsp;543 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * create_pathlist will sort it out later; note that it preserves<br />
+&nbsp;544 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * order in that it keeps the first of any duplicate set in its<br />
+&nbsp;545 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * original position.<br />
+&nbsp;546 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;547 <br />
+&nbsp;548 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locales_copy = xstrdup (locales);<br />
+&nbsp;549 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locales_ptr = locales_copy;<br />
+&nbsp;550 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (tok = strsep (&amp;locales_ptr, <span class='str_literal'>":"</span>); tok;<br />
+&nbsp;551 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     tok = strsep (&amp;locales_ptr, <span class='str_literal'>":"</span>)) {<br />
+&nbsp;552 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!*tok)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* ignore empty fields */<br />
+&nbsp;553 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;554 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"checking <span class='for'>for</span> locale %s\n"</span>, tok);<br />
+&nbsp;555 <br />
+&nbsp;556 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_manpath = get_nls_manpath (manpathlist, tok);<br />
+&nbsp;557 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locale_manpath) {<br />
+&nbsp;558 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpath)<br />
+&nbsp;559 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = appendstr (manpath, <span class='str_literal'>":"</span>,<br />
+&nbsp;560 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     locale_manpath, NULL);<br />
+&nbsp;561 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;562 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (locale_manpath);<br />
+&nbsp;563 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locale_manpath);<br />
+&nbsp;564 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;565 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;566 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locales_copy);<br />
+&nbsp;567 <br />
+&nbsp;568 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Always try untranslated pages as a last resort. */<br />
+&nbsp;569 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_manpath = get_nls_manpath (manpathlist, <span class='str_literal'>"C"</span>);<br />
+&nbsp;570 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locale_manpath) {<br />
+&nbsp;571 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpath)<br />
+&nbsp;572 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = appendstr (manpath, <span class='str_literal'>":"</span>,<br />
+&nbsp;573 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     locale_manpath, NULL);<br />
+&nbsp;574 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;575 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (locale_manpath);<br />
+&nbsp;576 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locale_manpath);<br />
+&nbsp;577 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;578 <br />
+&nbsp;579 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+&nbsp;580 }<br />
+&nbsp;581 <span class='comment'>// systems and manpathlist-colon separated values => quadratic complexity for resulting manpath</span><br />
+&nbsp;582 <span class='static'>static</span> <span class='char'>char</span> *add_system_manpath (const <span class='char'>char</span> *systems, <span class='const'>const</span> <span class='char'>char</span> *manpathlist)<br />
+&nbsp;583 {<br />
+&nbsp;584 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *one_system;<br />
+&nbsp;585 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
+&nbsp;586 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *tmpsystems;<br />
+&nbsp;587 <br />
+&nbsp;588 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!systems)<br />
+&nbsp;589 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;systems = getenv (<span class='str_literal'>"SYSTEM"</span>);<br />
+&nbsp;590 <br />
+&nbsp;591 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!systems || !*systems)<br />
+&nbsp;592 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (manpathlist);<br />
+&nbsp;593 <br />
+&nbsp;594 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Avoid breaking the environment. */<br />
+&nbsp;595 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmpsystems = xstrdup (systems);<br />
+&nbsp;596 <br />
+&nbsp;597 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* For each systems component */<br />
+&nbsp;598 <br />
+&nbsp;599 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (one_system = strtok (tmpsystems, <span class='str_literal'>",:"</span>); one_system;<br />
+&nbsp;600 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     one_system = strtok (NULL, <span class='str_literal'>",:"</span>)) {<br />
+&nbsp;601 <br />
+&nbsp;602 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* For each manpathlist component */<br />
+&nbsp;603 <br />
+&nbsp;604 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!STREQ (one_system, <span class='str_literal'>"man"</span>)) {<br />
+&nbsp;605 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *next, *path;<br />
+&nbsp;606 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *newdir = NULL;<br />
+&nbsp;607 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (path = manpathlist; path; path = next) {<br />
+&nbsp;608 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status;<br />
+&nbsp;609 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *element;<br />
+&nbsp;610 <br />
+&nbsp;611 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;next = strchr (path, <span class='str_literal'>':'</span>);<br />
+&nbsp;612 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (next) {<br />
+&nbsp;613 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;element = xstrndup (path, next - path);<br />
+&nbsp;614 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++next;<br />
+&nbsp;615 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;616 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;element = xstrdup (path);<br />
+&nbsp;617 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newdir = appendstr (newdir, element, <span class='str_literal'>"/"</span>,<br />
+&nbsp;618 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    one_system, NULL);<br />
+&nbsp;619 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (element);<br />
+&nbsp;620 <br />
+&nbsp;621 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;status = is_directory (newdir);<br />
+&nbsp;622 <br />
+&nbsp;623 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (status == 0)<br />
+&nbsp;624 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_not_directory (newdir);<br />
+&nbsp;625 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 1) {<br />
+&nbsp;626 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"adding %s to manpathlist\n"</span>,<br />
+&nbsp;627 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       newdir);<br />
+&nbsp;628 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, newdir);<br />
+&nbsp;629 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;630 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug_error (<span class='str_literal'>"can't stat %s"</span>, newdir);<br />
+&nbsp;631 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* reset newdir */<br />
+&nbsp;632 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*newdir = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;633 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;634 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (newdir)<br />
+&nbsp;635 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (newdir);<br />
+&nbsp;636 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;637 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, manpathlist);<br />
+&nbsp;638 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;639 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (tmpsystems);<br />
+&nbsp;640 <br />
+&nbsp;641 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/*<br />
+&nbsp;642 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * Thu, 21 Nov 1996 22:24:19 +0200 fpolacco@debian.org<br />
+&nbsp;643 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * bug#5534 (man fails <span class='if'>if</span> env var SYSTEM is defined)<br />
+&nbsp;644 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * with error [man: internal manpath equates to NULL]<br />
+&nbsp;645 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * the reason: is_directory (newdir); returns -1<br />
+&nbsp;646 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;647 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!manpath) {<br />
+&nbsp;648 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"add_system_manpath(): "</span><br />
+&nbsp;649 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"internal manpath equates to NULL\n"</span>);<br />
+&nbsp;650 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (manpathlist);<br />
+&nbsp;651 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;652 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+&nbsp;653 }<br />
+&nbsp;654 <br />
+&nbsp;655 /*<br />
+&nbsp;656  * Always add system and locale directories to pathlist.<br />
+&nbsp;657  * If the environment variable MANPATH is set, <span class='return'>return</span> it.<br />
+&nbsp;658  * If the environment variable PATH is set and has a nonzero length,<br />
+&nbsp;659  * try to determine the corresponding manpath, otherwise, <span class='return'>return</span> the<br />
+&nbsp;660  * default manpath.<br />
+&nbsp;661  *<br />
+&nbsp;662  * The man_db.config file is used to map system wide /bin directories<br />
+&nbsp;663  * to top level man page directories.<br />
+&nbsp;664  *<br />
+&nbsp;665  * For directories which are in the user's path but not in the<br />
+&nbsp;666  * man_db.config file, see <span class='if'>if</span> there is a subdirectory `man<span class='str_literal'>' or `MAN'</span>.<br />
+&nbsp;667  * If so, add that directory to the path.  Example:  user has<br />
+&nbsp;668  * $HOME/bin in his path and the directory $HOME/bin/man exists -- the<br />
+&nbsp;669  * directory $HOME/bin/man will be added to the manpath.<br />
+&nbsp;670  */<br />
+&nbsp;671 <span class='static'>static</span> <span class='char'>char</span> *guess_manpath (const <span class='char'>char</span> *systems)<br />
+&nbsp;672 {<br />
+&nbsp;673 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *path = getenv (<span class='str_literal'>"PATH"</span>);<br />
+&nbsp;674 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpathlist, *manpath;<br />
+&nbsp;675 <br />
+&nbsp;676 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (path == NULL || getenv (<span class='str_literal'>"MAN_TEST_DISABLE_PATH"</span>)) {<br />
+&nbsp;677 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Things aren't going to work well, but hey... */<br />
+&nbsp;678 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (path == NULL &amp;&amp; !quiet)<br />
+&nbsp;679 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: $PATH not set"</span>));<br />
+&nbsp;680 <br />
+&nbsp;681 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = def_path (MANDATORY);<br />
+&nbsp;682 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;683 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strlen (path) == 0) {<br />
+&nbsp;684 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Things aren't going to work well here either... */<br />
+&nbsp;685 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;686 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: empty $PATH"</span>));<br />
+&nbsp;687 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;688 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> add_system_manpath (systems,<br />
+&nbsp;689 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   def_path (MANDATORY));<br />
+&nbsp;690 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;691 <br />
+&nbsp;692 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = get_manpath_from_path (path, 1);<br />
+&nbsp;693 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;694 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = add_system_manpath (systems, manpathlist);<br />
+&nbsp;695 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (manpathlist);<br />
+&nbsp;696 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+&nbsp;697 }<br />
+&nbsp;698 <br />
+&nbsp;699 <span class='char'>char</span> *get_manpath (const <span class='char'>char</span> *systems)<br />
+&nbsp;700 {<br />
+&nbsp;701 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpathlist;<br />
+&nbsp;702 <br />
+&nbsp;703 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* need to read config file even <span class='if'>if</span> MANPATH set, <span class='for'>for</span> mandb(8) */<br />
+&nbsp;704 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;read_config_file (0);&nbsp;&nbsp;&nbsp;<span class='comment'>// just reading config file</span><br />
+&nbsp;705 <br />
+&nbsp;706 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = getenv (<span class='str_literal'>"MANPATH"</span>);<br />
+&nbsp;707 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpathlist &amp;&amp; *manpathlist) {<br />
+&nbsp;708 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *system1, *system2, *guessed;<br />
+&nbsp;709 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *pos;<br />
+&nbsp;710 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* This must be it. */<br />
+&nbsp;711 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpathlist[0] == <span class='str_literal'>':'</span>) {<br />
+&nbsp;712 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;713 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0,<br />
+&nbsp;714 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"warning: $MANPATH set, "</span><br />
+&nbsp;715 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"prepending %s"</span>),<br />
+&nbsp;716 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;717 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;system1 = <span class='highlight'>add_system_manpath</span> (systems, manpathlist);<span class='highlight_text'>combine system paths with manpathlist in O(n^2)</span><br />
+&nbsp;718 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;guessed = <span class='highlight'>guess_manpath</span> (systems);<span class='highlight_text'>KSIA</span><br />
+&nbsp;719 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = xasprintf (<span class='str_literal'>"%s%s"</span>, guessed, system1);<br />
+&nbsp;720 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (guessed);<br />
+&nbsp;721 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (system1);<br />
+&nbsp;722 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> <span class='if'>if</span> (manpathlist[strlen (manpathlist) - 1] == <span class='str_literal'>':'</span>) {<br />
+&nbsp;723 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;724 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0,<br />
+&nbsp;725 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"warning: $MANPATH set, "</span><br />
+&nbsp;726 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"appending %s"</span>),<br />
+&nbsp;727 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;728 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;system1 = <span class='highlight'>add_system_manpath</span> (systems, manpathlist);<span class='highlight_text'>combine system paths with manpathlist in O(n^2)</span><br />
+&nbsp;729 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;guessed = <span class='highlight'>guess_manpath</span> (systems);<span class='highlight_text'>KSIA</span><br />
+&nbsp;730 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = xasprintf (<span class='str_literal'>"%s%s"</span>, system1, guessed);<br />
+&nbsp;731 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (guessed);<br />
+&nbsp;732 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (system1);<br />
+&nbsp;733 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> <span class='if'>if</span> ((pos = strstr (manpathlist,<span class='str_literal'>"::"</span>))) {<br />
+&nbsp;734 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*(pos++) = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;735 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;736 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0,<br />
+&nbsp;737 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"warning: $MANPATH set, "</span><br />
+&nbsp;738 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"inserting %s"</span>),<br />
+&nbsp;739 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;740 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;system1 = <span class='highlight'>add_system_manpath</span> (systems, manpathlist);<span class='highlight_text'>combine system paths with manpathlist in O(n^2)</span><br />
+&nbsp;741 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;guessed = <span class='highlight'>guess_manpath</span> (systems);<span class='highlight_text'>KSIA</span><br />
+&nbsp;742 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;system2 = <span class='highlight'>add_system_manpath</span> (systems, pos);<span class='highlight_text'>combine system paths with manpathlist in O(n^2)</span><br />
+&nbsp;743 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = xasprintf (<span class='str_literal'>"%s:%s%s"</span>, system1, guessed,<br />
+&nbsp;744 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; system2);<br />
+&nbsp;745 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (system2);<br />
+&nbsp;746 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (guessed);<br />
+&nbsp;747 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (system1);<br />
+&nbsp;748 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;749 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;750 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0,<br />
+&nbsp;751 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"warning: $MANPATH set, ignoring %s"</span>),<br />
+&nbsp;752 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;753 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = <span class='highlight'>add_system_manpath</span> (systems,<span class='highlight_text'>combine system paths with manpathlist in O(n^2)</span><br />
+&nbsp;754 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  manpathlist);<br />
+&nbsp;755 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;756 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;757 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = <span class='highlight'>guess_manpath</span> (systems);<span class='highlight_text'>KSIA</span><br />
+&nbsp;758 <br />
+&nbsp;759 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpathlist;<br />
+&nbsp;760 }<br />
+&nbsp;761 <br />
+&nbsp;762 /* Parse the manpath.config file, extracting appropriate information. */<br />
+&nbsp;763 <span class='static'>static</span> <span class='void'>void</span> add_to_dirlist (FILE *config, <span class='int'>int</span> user)<br />
+&nbsp;764 {<br />
+&nbsp;765 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *bp;<br />
+&nbsp;766 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *buf = NULL;<br />
+&nbsp;767 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t n = 0;<br />
+&nbsp;768 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> key[512], cont[512];<br />
+&nbsp;769 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> val;<br />
+&nbsp;770 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> c;<br />
+&nbsp;771 <br />
+&nbsp;772 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (getline (&amp;buf, &amp;n, config) &gt;= 0) {<br />
+&nbsp;773 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bp = buf;<br />
+&nbsp;774 <br />
+&nbsp;775 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (CTYPE (isspace, *bp))<br />
+&nbsp;776 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;bp++;<br />
+&nbsp;777 <br />
+&nbsp;778 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* TODO: would like a (limited) replacement <span class='for'>for</span> sscanf()<br />
+&nbsp;779 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * here that allocates its own memory. At that point check<br />
+&nbsp;780 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * everything that sprintf()s manpath et al!<br />
+&nbsp;781 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;782 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*bp == <span class='str_literal'>'#'</span> || *bp == <span class='str_literal'>'\0'</span>)<br />
+&nbsp;783 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto next;<br />
+&nbsp;784 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (strncmp (bp, <span class='str_literal'>"NOCACHE"</span>, 7) == 0)<br />
+&nbsp;785 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;disable_cache = 1;<br />
+&nbsp;786 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (strncmp (bp, <span class='str_literal'>"NO"</span>, 2) == 0)<br />
+&nbsp;787 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto next;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* match any word starting with NO */<br />
+&nbsp;788 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"MANBIN %*s"</span>) == 1)<br />
+&nbsp;789 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto next;<br />
+&nbsp;790 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"MANDATORY_MANPATH %511s"</span>, key) == 1)<br />
+&nbsp;791 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_mandatory (key);&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;792 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"MANPATH_MAP %511s %511s"</span>,<br />
+&nbsp;793 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; key, cont) == 2) <br />
+&nbsp;794 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_manpath_map (key, cont);<br />
+&nbsp;795 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> ((c = sscanf (bp, <span class='str_literal'>"MANDB_MAP %511s %511s"</span>,<br />
+&nbsp;796 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      key, cont)) &gt; 0) <br />
+&nbsp;797 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_mandb_map (key, cont, c, user);<br />
+&nbsp;798 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> ((c = sscanf (bp, <span class='str_literal'>"DEFINE %511s %511[^\n]"</span>,<br />
+&nbsp;799 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      key, cont)) &gt; 0)<br />
+&nbsp;800 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_def (key, cont, c, user);<br />
+&nbsp;801 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"SECTION %511[^\n]"</span>, cont) == 1)<br />
+&nbsp;802 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_sections (cont, user);<br />
+&nbsp;803 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"SECTIONS %511[^\n]"</span>, cont) == 1)<br />
+&nbsp;804 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Since I keep getting it wrong ... */<br />
+&nbsp;805 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_sections (cont, user);<br />
+&nbsp;806 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"MINCATWIDTH %d"</span>, &amp;val) == 1)<br />
+&nbsp;807 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;min_cat_width = val;<br />
+&nbsp;808 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"MAXCATWIDTH %d"</span>, &amp;val) == 1)<br />
+&nbsp;809 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;max_cat_width = val;<br />
+&nbsp;810 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (sscanf (bp, <span class='str_literal'>"CATWIDTH %d"</span>, &amp;val) == 1)<br />
+&nbsp;811 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cat_width = val;<br />
+&nbsp;812 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> {<br />
+&nbsp;813 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"can<span class='str_literal'>'t parse directory list `%s'</span>"</span>), bp);<br />
+&nbsp;814 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_reading_mp_config (CONFIG_FILE);<br />
+&nbsp;815 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;816 <br />
+&nbsp;817 next:<br />
+&nbsp;818 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (buf);<br />
+&nbsp;819 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;buf = NULL;<br />
+&nbsp;820 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;821 <br />
+&nbsp;822 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (buf);<br />
+&nbsp;823 }<br />
+&nbsp;824 <br />
+&nbsp;825 <span class='static'>static</span> <span class='void'>void</span> free_config_file (void *unused ATTRIBUTE_UNUSED)<br />
+&nbsp;826 {<br />
+&nbsp;827 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;struct list *list = <span class='needinfo'>namestore</span>, *prev;<span class='needinfo_text'><b>NEEDINFO:</b> list of items of config file</span><br />
+&nbsp;828 <br />
+&nbsp;829 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (list) {<br />
+&nbsp;830 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (list-&gt;key);<br />
+&nbsp;831 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (list-&gt;cont);<br />
+&nbsp;832 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;prev = list;<br />
+&nbsp;833 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;list = list-&gt;next;<br />
+&nbsp;834 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (prev);<br />
+&nbsp;835 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;836 <br />
+&nbsp;837 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;namestore = tailstore = NULL;<br />
+&nbsp;838 }<br />
+&nbsp;839 <br />
+&nbsp;840 <span class='void'>void</span> read_config_file (int optional)<br />
+&nbsp;841 {<br />
+&nbsp;842 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='static'>static</span> <span class='int'>int</span> done = 0;<br />
+&nbsp;843 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;char *dotmanpath = NULL;&nbsp;&nbsp;&nbsp;<span class='comment'>// ~/.manpath</span><br />
+&nbsp;844 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;FILE *config;<br />
+&nbsp;845 <br />
+&nbsp;846 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (done)&nbsp;&nbsp;&nbsp;<span class='comment'>// read config file only once</span><br />
+&nbsp;847 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;848 <br />
+&nbsp;849 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;push_cleanup (free_config_file, NULL, 0);<br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(1) })
+</script>
+<span class='fold_button fold_off fold_off_id_1' onclick='toggleFold(1)'>Unfold</span><span class='fold_button fold_on fold_on_id_1' onclick='toggleFold(1)'>Fold</span><span class='fold_text'>read config file from ~/.manpath or user file (user_config_file) through option</span><br /><div class='fold' id='fold_1'>&nbsp;850 <br />
+&nbsp;851 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (user_config_file)&nbsp;&nbsp;&nbsp;<span class='comment'>// NULL if called from manpath</span><br />
+&nbsp;852 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dotmanpath = xstrdup (user_config_file);<br />
+&nbsp;853 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> {<br />
+&nbsp;854 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *home = getenv (<span class='str_literal'>"HOME"</span>);<br />
+&nbsp;855 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (home)<br />
+&nbsp;856 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dotmanpath = xasprintf (<span class='str_literal'>"%s/.manpath"</span>, home);<br />
+&nbsp;857 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;858 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (dotmanpath) {<br />
+&nbsp;859 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config = fopen (dotmanpath, <span class='str_literal'>"r"</span>);<br />
+&nbsp;860 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (config != NULL) {<br />
+&nbsp;861 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"From the config file %s:\n\n"</span>, dotmanpath);<br />
+&nbsp;862 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>add_to_dirlist (config, 1)</span>;<span class='highlight_text'>parses config file and calls add functions</span><br />
+&nbsp;863 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fclose (config);<br />
+&nbsp;864 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;865 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (dotmanpath);<br />
+&nbsp;866 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(2) })
+</script>
+<span class='fold_button fold_off fold_off_id_2' onclick='toggleFold(2)'>Unfold</span><span class='fold_button fold_on fold_on_id_2' onclick='toggleFold(2)'>Fold</span><span class='fold_text'>read testing config file i guess</span><br /><div class='fold' id='fold_2'>&nbsp;867 <br />
+&nbsp;868 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (getenv (<span class='needinfo'>"MAN_TEST_DISABLE_SYSTEM_CONFIG"</span>) == NULL) {<span class='needinfo_text'><b>NEEDINFO:</b> I guess just for testing purposes</span><br />
+&nbsp;869 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config = fopen (CONFIG_FILE, <span class='str_literal'>"r"</span>);<br />
+&nbsp;870 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (config == NULL) {<br />
+&nbsp;871 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (optional)<br />
+&nbsp;872 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"can't open %s; continuing anyway\n"</span>,<br />
+&nbsp;873 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;874 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;875 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (FAIL, 0,<br />
+&nbsp;876 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"can't open the manpath "</span><br />
+&nbsp;877 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"configuration file %s"</span>),<br />
+&nbsp;878 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       CONFIG_FILE);<br />
+&nbsp;879 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;880 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"From the config file %s:\n\n"</span>, CONFIG_FILE);<br />
+&nbsp;881 <br />
+&nbsp;882 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_to_dirlist (config, 0);<br />
+&nbsp;883 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fclose (config);<br />
+&nbsp;884 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;885 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+&nbsp;886 <br />
+&nbsp;887 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;print_list ();&nbsp;&nbsp;&nbsp;<span class='comment'>// just print to debug</span><br />
+&nbsp;888 <br />
+&nbsp;889 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;done = 1;<br />
+&nbsp;890 }<br />
+&nbsp;891 <br />
+&nbsp;892 <br />
+&nbsp;893 /*<br />
+&nbsp;894  * Construct the default manpath.  This picks up mandatory manpaths<br />
+&nbsp;895  * only.<br />
+&nbsp;896  */<br />
+&nbsp;897 <span class='static'>static</span> <span class='char'>char</span> *def_path (int flag)<br />
+&nbsp;898 {<br />
+&nbsp;899 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
+&nbsp;900 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list; <br />
+&nbsp;901 <br />
+&nbsp;902 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;903 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == flag) {<br />
+&nbsp;904 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **expanded_dirs;<br />
+&nbsp;905 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;906 <br />
+&nbsp;907 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;expanded_dirs = expand_path (list-&gt;key);<br />
+&nbsp;908 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; expanded_dirs[i]; i++) {<br />
+&nbsp;909 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status = is_directory (expanded_dirs[i]);<br />
+&nbsp;910 <br />
+&nbsp;911 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (status &lt; 0)<br />
+&nbsp;912 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_stat_file (expanded_dirs[i]);<br />
+&nbsp;913 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 0 &amp;&amp; !quiet)<br />
+&nbsp;914 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0,<br />
+&nbsp;915 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"warning: mandatory "</span><br />
+&nbsp;916 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"directory %s doesn't exist"</span>),<br />
+&nbsp;917 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       expanded_dirs[i]);<br />
+&nbsp;918 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 1)<br />
+&nbsp;919 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend<br />
+&nbsp;920 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(manpath, expanded_dirs[i]);<br />
+&nbsp;921 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (expanded_dirs[i]);<br />
+&nbsp;922 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;923 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (expanded_dirs);<br />
+&nbsp;924 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;925 <br />
+&nbsp;926 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* If we have complete config file failure... */<br />
+&nbsp;927 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!manpath)<br />
+&nbsp;928 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (<span class='str_literal'>"/usr/man"</span>);<br />
+&nbsp;929 <br />
+&nbsp;930 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+&nbsp;931 }<br />
+&nbsp;932 <br />
+&nbsp;933 /*<br />
+&nbsp;934  * If specified with configure, append OVERRIDE_DIR to dir param and add it<br />
+&nbsp;935  * to the lp list.<br />
+&nbsp;936  */<br />
+&nbsp;937 <span class='static'>static</span> <span class='void'>void</span> insert_override_dir (char **lp, <span class='const'>const</span> <span class='char'>char</span> *dir)<br />
+&nbsp;938 {<br />
+&nbsp;939 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *override_dir = NULL;<br />
+&nbsp;940 <br />
+&nbsp;941 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!strlen (OVERRIDE_DIR))<br />
+&nbsp;942 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;943 <br />
+&nbsp;944 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> ((override_dir = xasprintf (<span class='str_literal'>"%s/%s"</span>, dir, OVERRIDE_DIR))) {<br />
+&nbsp;945 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_dir_to_list (lp, override_dir);<br />
+&nbsp;946 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (override_dir);<br />
+&nbsp;947 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;948 }<br />
+&nbsp;949 <br />
+&nbsp;950 /*<br />
+&nbsp;951  * For each directory in the user's path, see <span class='if'>if</span> it is one of the<br />
+&nbsp;952  * directories listed in the man_db.config file.  If so, and it is<br />
+&nbsp;953  * not already in the manpath, add it.  If the directory is not listed<br />
+&nbsp;954  * in the man_db.config file, see <span class='if'>if</span> there is a subdirectory `../man' or<br />
+&nbsp;955  * `man<span class='str_literal'>', or, <span class='for'>for</span> FHS-compliance, `../share/man'</span> or `share/man'.  If so,<br />
+&nbsp;956  * and it is not already in the manpath, add it.<br />
+&nbsp;957  * Example:  user has $HOME/bin in his path and the directory<br />
+&nbsp;958  * $HOME/man exists -- the directory $HOME/man will be added<br />
+&nbsp;959  * to the manpath.<br />
+&nbsp;960  */<br />
+&nbsp;961 <span class='char'>char</span> *get_manpath_from_path (const <span class='char'>char</span> *path, <span class='int'>int</span> mandatory)<br />
+&nbsp;962 {<br />
+&nbsp;963 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> len;<br />
+&nbsp;964 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *tmppath;<br />
+&nbsp;965 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *t;<br />
+&nbsp;966 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *p;<br />
+&nbsp;967 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **lp;<br />
+&nbsp;968 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *end;<br />
+&nbsp;969 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpathlist;<br />
+&nbsp;970 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+&nbsp;971 <br />
+&nbsp;972 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tmppath = xstrdup (path);<br />
+&nbsp;973 <br />
+&nbsp;974 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (end = p = tmppath; end; p = end + 1) {<br />
+&nbsp;975 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *mandir_list;<br />
+&nbsp;976 <br />
+&nbsp;977 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end = strchr (p, <span class='str_literal'>':'</span>);<br />
+&nbsp;978 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (end)<br />
+&nbsp;979 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*end = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;980 <br />
+&nbsp;981 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* don't <span class='do'>do</span> this <span class='for'>for</span> current dir (<span class='str_literal'>"."</span> or empty entry in PATH) */<br />
+&nbsp;982 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*p == <span class='str_literal'>'\0'</span> || strcmp (p, <span class='str_literal'>"."</span>) == 0)<br />
+&nbsp;983 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;984 <br />
+&nbsp;985 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"\npath directory %s "</span>, p);<br />
+&nbsp;986 <br />
+&nbsp;987 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mandir_list = iterate_over_list (NULL, p, MANPATH_MAP);<br />
+&nbsp;988 <br />
+&nbsp;989 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/*<br />
+&nbsp;990       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * The directory we're working on is in the config file.<br />
+&nbsp;991       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * If we haven't added it to the list yet, do.<br />
+&nbsp;992       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;993 <br />
+&nbsp;994 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (mandir_list) {<br />
+&nbsp;995 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"is in the config file\n"</span>);<br />
+&nbsp;996 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (mandir_list) {<br />
+&nbsp;997 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;insert_override_dir (tmplist,<br />
+&nbsp;998 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     mandir_list-&gt;cont);<br />
+&nbsp;999 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_dir_to_list (tmplist, mandir_list-&gt;cont);<br />
+1000 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mandir_list = iterate_over_list<br />
+1001 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(mandir_list, p, MANPATH_MAP);<br />
+1002 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1003 <br />
+1004       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; /* The directory we<span class='str_literal'>'re working on isn'</span>t in the config file.  <br />
+1005       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    See <span class='if'>if</span> it has ../man or man subdirectories.  <br />
+1006       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    If so, and it hasn't been added to the list, do. */<br />
+1007 <br />
+1008 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+1009 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"is not in the config file\n"</span>);<br />
+1010 <br />
+1011 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;t = has_mandir (p);<br />
+1012 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (t) {<br />
+1013 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"but does have a ../man, man, "</span><br />
+1014 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"../share/man, or share/man "</span><br />
+1015 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"subdirectory\n"</span>);<br />
+1016 <br />
+1017 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;insert_override_dir (tmplist, t);<br />
+1018 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_dir_to_list (tmplist, t);<br />
+1019 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (t);<br />
+1020 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+1021 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"and doesn't have ../man, man, "</span><br />
+1022 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"../share/man, or share/man "</span><br />
+1023 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"subdirectories\n"</span>);<br />
+1024 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1025 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1026 <br />
+1027 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (tmppath);<br />
+1028 <br />
+1029 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (mandatory) {<br />
+1030 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"\nadding mandatory man directories\n\n"</span>);<br />
+1031 <br />
+1032 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1033 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDATORY) {<br />
+1034 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;insert_override_dir (tmplist, list-&gt;key);<br />
+1035 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_dir_to_list (tmplist, list-&gt;key);<br />
+1036 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1037 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1038 <br />
+1039 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;len = 0;<br />
+1040 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lp = tmplist;<br />
+1041 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*lp != NULL) {<br />
+1042 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;len += strlen (*lp) + 1;<br />
+1043 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lp++;<br />
+1044 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1045 <br />
+1046 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!len)<br />
+1047 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* No path elements in configuration file or with<br />
+1048 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * appropriate subdirectories.<br />
+1049 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+1050 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (<span class='str_literal'>""</span>);<br />
+1051 <br />
+1052 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = xmalloc (len);<br />
+1053 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*manpathlist = <span class='str_literal'>'\0'</span>;<br />
+1054 <br />
+1055 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lp = tmplist;<br />
+1056 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;p = manpathlist;<br />
+1057 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*lp != NULL) {<br />
+1058 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;len = strlen (*lp);<br />
+1059 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memcpy (p, *lp, len);<br />
+1060 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (*lp);<br />
+1061 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*lp = NULL;<br />
+1062 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;p += len;<br />
+1063 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*p++ = <span class='str_literal'>':'</span>;<br />
+1064 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lp++;<br />
+1065 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1066 <br />
+1067 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;p[-1] = <span class='str_literal'>'\0'</span>;<br />
+1068 <br />
+1069 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpathlist;<br />
+1070 }<br />
+1071 <br />
+1072 /* Add a directory to the manpath list <span class='if'>if</span> it isn't already there. */<br />
+1073 <span class='static'>static</span> <span class='void'>void</span> add_expanded_dir_to_list (char **lp, <span class='const'>const</span> <span class='char'>char</span> *dir)<br />
+1074 {<br />
+1075 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status;<br />
+1076 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> pos = 0;<br />
+1077 <br />
+1078 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*lp != NULL) {<br />
+1079 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (pos &gt; MAXDIRS - 1)<br />
+1080 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_overlong_list ();<br />
+1081 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!strcmp (*lp, dir)) {<br />
+1082 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"%s is already in the manpath\n"</span>, dir);<br />
+1083 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+1084 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1085 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lp++;<br />
+1086 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pos++;<br />
+1087 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1088 <br />
+1089 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Not found -- add it. */<br />
+1090 <br />
+1091 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;status = is_directory (dir);<br />
+1092 <br />
+1093 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (status &lt; 0)<br />
+1094 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_stat_file (dir);<br />
+1095 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 0)<br />
+1096 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_not_directory (dir);<br />
+1097 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 1) {<br />
+1098 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"adding %s to manpath\n"</span>, dir);<br />
+1099 <br />
+1100 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*lp = xstrdup (dir);<br />
+1101 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1102 }<br />
+1103 <br />
+1104 /*<br />
+1105  * Add a directory to the manpath list <span class='if'>if</span> it isn't already there, expanding<br />
+1106  * wildcards.<br />
+1107  */<br />
+1108 <span class='static'>static</span> <span class='void'>void</span> add_dir_to_list (char **lp, <span class='const'>const</span> <span class='char'>char</span> *dir)<br />
+1109 {<br />
+1110 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **expanded_dirs;<br />
+1111 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+1112 <br />
+1113 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;expanded_dirs = expand_path (dir);<br />
+1114 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; expanded_dirs[i]; i++) {<br />
+1115 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_expanded_dir_to_list (lp, expanded_dirs[i]);<br />
+1116 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (expanded_dirs[i]);<br />
+1117 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1118 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (expanded_dirs);<br />
+1119 }<br />
+1120 <br />
+1121 /* path does not exist in config file: check to see <span class='if'>if</span> path/../man,<br />
+1122    path/man, path/../share/man, or path/share/man exist.  If so<span class='return'>return</span><br />
+1123    it, <span class='if'>if</span> not <span class='return'>return</span> NULL. */<br />
+1124 <span class='static'>static</span> inline <span class='char'>char</span> *has_mandir (const <span class='char'>char</span> *path)<br />
+1125 {<br />
+1126 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *newpath;<br />
+1127 <br />
+1128 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* don't assume anything about path, especially that it ends in <br />
+1129 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   <span class='str_literal'>"bin"</span> or even has a <span class='str_literal'>'/'</span> in it! */<br />
+1130 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   <br />
+1131 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *subdir = strrchr (path, <span class='str_literal'>'/'</span>);<br />
+1132 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (subdir) {<br />
+1133 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newpath = xasprintf (<span class='str_literal'>"%.*s/man"</span>, (int) (subdir - path), path);<br />
+1134 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (is_directory (newpath) == 1)<br />
+1135 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> newpath;<br />
+1136 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (newpath);<br />
+1137 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1138 <br />
+1139 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newpath = xasprintf (<span class='str_literal'>"%s/man"</span>, path);<br />
+1140 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (is_directory (newpath) == 1)<br />
+1141 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> newpath;<br />
+1142 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (newpath);<br />
+1143 <br />
+1144 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (subdir) {<br />
+1145 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newpath = xasprintf (<span class='str_literal'>"%.*s/share/man"</span>,<br />
+1146 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     (int) (subdir - path), path);<br />
+1147 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (is_directory (newpath) == 1)<br />
+1148 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> newpath;<br />
+1149 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (newpath);<br />
+1150 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1151 <br />
+1152 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newpath = xasprintf (<span class='str_literal'>"%s/share/man"</span>, path);<br />
+1153 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (is_directory (newpath) == 1)<br />
+1154 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> newpath;<br />
+1155 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (newpath);<br />
+1156 <br />
+1157 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+1158 }<br />
+1159 <br />
+1160 <span class='static'>static</span> <span class='char'>char</span> **add_dir_to_path_list (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p)<br />
+1161 {<br />
+1162 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status, i;<br />
+1163 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *cwd, *d, **expanded_dirs;<br />
+1164 <br />
+1165 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (mp - mphead &gt; MAXDIRS - 1)<br />
+1166 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_overlong_list ();<br />
+1167 <br />
+1168 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;expanded_dirs = expand_path (p);<br />
+1169 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; expanded_dirs[i]; i++) {<br />
+1170 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;d = expanded_dirs[i];<br />
+1171 <br />
+1172 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;status = is_directory (d);<br />
+1173 <br />
+1174 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (status &lt; 0)<br />
+1175 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_stat_file (d);<br />
+1176 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (status == 0)<br />
+1177 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;gripe_not_directory (d);<br />
+1178 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> {<br />
+1179 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* deal with relative paths */<br />
+1180 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*d != <span class='str_literal'>'/'</span>) {<br />
+1181 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cwd = xgetcwd ();<br />
+1182 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!cwd)<br />
+1183 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (FATAL, errno,<br />
+1184 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_(<span class='str_literal'>"can't determine current directory"</span>));<br />
+1185 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*mp = appendstr (cwd, <span class='str_literal'>"/"</span>, d, NULL);<br />
+1186 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+1187 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*mp = xstrdup (d);<br />
+1188 <br />
+1189 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"adding %s to manpathlist\n"</span>, *mp);<br />
+1190 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp++;<br />
+1191 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1192 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (d);<br />
+1193 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1194 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (expanded_dirs);<br />
+1195 <br />
+1196 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> mp;<br />
+1197 }<br />
+1198 <br />
+1199 <span class='void'>void</span> create_pathlist (const <span class='char'>char</span> *manp, <span class='char'>char</span> **mp)<br />
+1200 {<br />
+1201 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *p, *end;<br />
+1202 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **mphead = mp;<br />
+1203 <br />
+1204 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Expand the manpath into a list <span class='for'>for</span> easier handling. */<br />
+1205 <br />
+1206 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (p = manp;; p = end + 1) {<br />
+1207 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end = strchr (p, <span class='str_literal'>':'</span>);<br />
+1208 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (end) {<br />
+1209 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *element = xstrndup (p, end - p);<br />
+1210 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = add_dir_to_path_list (mphead, mp, element);<br />
+1211 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (element);<br />
+1212 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+1213 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = add_dir_to_path_list (mphead, mp, p);<br />
+1214 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+1215 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1216 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1217 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*mp = NULL;<br />
+1218 <br />
+1219 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Eliminate duplicates due to symlinks. */<br />
+1220 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = mphead;<br />
+1221 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*mp) {<br />
+1222 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *target, *oldmp = NULL;<br />
+1223 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **dupcheck;<br />
+1224 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> found_dup = 0;<br />
+1225 <br />
+1226 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* After resolving all symlinks, is the target also in the<br />
+1227 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * manpath?<br />
+1228 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+1229 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;target = canonicalize_file_name (*mp);<br />
+1230 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (target) {<br />
+1231 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;oldmp = *mp;<br />
+1232 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*mp = target;<br />
+1233 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1234 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Only check up to the current list position, to keep item<br />
+1235 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * order stable across deduplication.<br />
+1236 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+1237 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (dupcheck = mphead; *dupcheck &amp;&amp; dupcheck != mp;<br />
+1238 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     ++dupcheck) {<br />
+1239 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!STREQ (*mp, *dupcheck))<br />
+1240 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+1241 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"Removing duplicate manpath entry %s (%td) -&gt; "</span><br />
+1242 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"%s (%td)\n"</span>,<br />
+1243 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       oldmp, mp - mphead,<br />
+1244 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       *dupcheck, dupcheck - mphead);<br />
+1245 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (*mp);<br />
+1246 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (dupcheck = mp; *(dupcheck + 1); ++dupcheck)<br />
+1247 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*dupcheck = *(dupcheck + 1);<br />
+1248 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*dupcheck = NULL;<br />
+1249 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found_dup = 1;<br />
+1250 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+1251 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1252 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (oldmp)<br />
+1253 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (oldmp);<br />
+1254 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!found_dup)<br />
+1255 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++mp;<br />
+1256 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1257 <br />
+1258 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (debug_level) {<br />
+1259 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> first = 1;<br />
+1260 <br />
+1261 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"final search path = "</span>);<br />
+1262 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (mp = mphead; *mp; ++mp) {<br />
+1263 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (first) {<br />
+1264 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"%s"</span>, *mp);<br />
+1265 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;first = 0;<br />
+1266 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+1267 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>":%s"</span>, *mp);<br />
+1268 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1269 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"\n"</span>);<br />
+1270 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1271 }<br />
+1272 <br />
+1273 <span class='void'>void</span> free_pathlist (char **mp)<br />
+1274 {<br />
+1275 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (*mp) {<br />
+1276 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (*mp);<br />
+1277 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*mp++ = NULL;<br />
+1278 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1279 }<br />
+1280 <br />
+1281 /* Routine to get list of named system and user manpaths (in reverse order). */<br />
+1282 <span class='char'>char</span> *get_mandb_manpath (void)<br />
+1283 {<br />
+1284 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
+1285 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+1286 <br />
+1287 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1288 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDB_MAP || list-&gt;flag == MANDB_MAP_USER)<br />
+1289 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, list-&gt;key);<br />
+1290 <br />
+1291 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
+1292 }<br />
+1293 <br />
+1294 /* Take manpath or manfile path as the first argument, and the type of<br />
+1295  * catpaths we want as the other (system catpaths, user catpaths, or both).<br />
+1296  * Return catdir mapping or NULL <span class='if'>if</span> it isn't a global/user mandir (as<br />
+1297  * appropriate).<br />
+1298  *<br />
+1299  * This routine would seem to work correctly <span class='for'>for</span> nls subdirs and would <br />
+1300  * specify the (correct) consistent catpath even <span class='if'>if</span> not defined in the <br />
+1301  * config file.<br />
+1302  *<br />
+1303  * Do not <span class='return'>return</span> user catpaths when cattype == 0! This is used to decide<br />
+1304  * whether to drop privileges. When cattype != 0 it's OK to <span class='return'>return</span> global<br />
+1305  * catpaths.<br />
+1306  */<br />
+1307 <span class='char'>char</span> *get_catpath (const <span class='char'>char</span> *name, <span class='int'>int</span> cattype)<br />
+1308 {<br />
+1309 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+1310 <br />
+1311 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1312 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (((cattype &amp; SYSTEM_CAT) &amp;&amp; list-&gt;flag == MANDB_MAP) ||<br />
+1313 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    ((cattype &amp; USER_CAT)   &amp;&amp; list-&gt;flag == MANDB_MAP_USER)) {<br />
+1314 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t manlen = strlen (list-&gt;key);<br />
+1315 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STRNEQ (name, list-&gt;key, manlen)) {<br />
+1316 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *suffix;<br />
+1317 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *infix;<br />
+1318 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *catpath = xstrdup (list-&gt;cont);<br />
+1319 <br />
+1320 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* For NLS subdirectories (e.g.<br />
+1321 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * /usr/share/man/de -&gt; /var/cache/man/de),<br />
+1322 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * we need to find the second-last slash, as<br />
+1323 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * long as this strictly follows the key.<br />
+1324 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+1325 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;suffix = strrchr (name, <span class='str_literal'>'/'</span>);<br />
+1326 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!suffix)<br />
+1327 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> appendstr (catpath,<br />
+1328 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  name + manlen, NULL);<br />
+1329 <br />
+1330 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (suffix &gt; name + manlen)<br />
+1331 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*--suffix == <span class='str_literal'>'/'</span>)<br />
+1332 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+1333 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (suffix &lt; name + manlen)<br />
+1334 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;suffix = name + manlen;<br />
+1335 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*suffix == <span class='str_literal'>'/'</span>)<br />
+1336 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;++suffix;<br />
+1337 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;infix = xstrndup (name + manlen,<br />
+1338 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  suffix - (name + manlen));<br />
+1339 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catpath = appendstr (catpath, infix, NULL);<br />
+1340 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (infix);<br />
+1341 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STRNEQ (suffix, <span class='str_literal'>"man"</span>, 3)) {<br />
+1342 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;suffix += 3;<br />
+1343 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catpath = appendstr (catpath, <span class='str_literal'>"cat"</span>,<br />
+1344 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     NULL);<br />
+1345 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1346 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catpath = appendstr (catpath, suffix, NULL);<br />
+1347 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> catpath;<br />
+1348 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1349 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1350 <br />
+1351 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+1352 }<br />
+1353 <br />
+1354 /* Check to see <span class='if'>if</span> the supplied man directory is a system-wide mandir.<br />
+1355  * Obviously, user directories must not be included here.<br />
+1356  */<br />
+1357 <span class='int'>int</span> is_global_mandir (const <span class='char'>char</span> *dir)<br />
+1358 {<br />
+1359 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
+1360 <br />
+1361 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1362 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDB_MAP &amp;&amp;<br />
+1363 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    STRNEQ (dir, list-&gt;key, strlen (list-&gt;key)))<br />
+1364 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 1;<br />
+1365 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+1366 }<br />
+1367 <br />
+1368 /* Accept a manpath (not a full pathname to a file) and <span class='return'>return</span> an FSSTND <br />
+1369    equivalent catpath */<br />
+1370 <span class='static'>static</span> inline <span class='char'>char</span> *fsstnd (const <span class='char'>char</span> *path)<br />
+1371 {<br />
+1372 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath;<br />
+1373 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *catpath;<br />
+1374 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *element;<br />
+1375 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+1376 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strncmp (path, MAN_ROOT, sizeof MAN_ROOT - 1) != 0) {<br />
+1377 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+1378 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: %s does not begin with %s"</span>),<br />
+1379 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       path, MAN_ROOT);<br />
+1380 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (path);<br />
+1381 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1382 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* get rid of initial <span class='str_literal'>"/usr"</span> */<br />
+1383 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;path += sizeof MAN_ROOT - 1;<br />
+1384 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (path);<br />
+1385 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catpath = xmalloc (strlen (path) + sizeof CAT_ROOT - 3);<br />
+1386 <br />
+1387 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* start with CAT_ROOT */ <br />
+1388 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(void) strcpy (catpath, CAT_ROOT);<br />
+1389 <br />
+1390 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* split up path into elements and deal with accordingly */<br />
+1391 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (element = strtok (manpath, <span class='str_literal'>"/"</span>); element;<br />
+1392 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     element = strtok (NULL, <span class='str_literal'>"/"</span>)) {<br />
+1393 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strncmp (element, <span class='str_literal'>"man"</span>, 3) == 0) {<br />
+1394 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*(element + 3)) { <br />
+1395 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*element = <span class='str_literal'>'c'</span>;<br />
+1396 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*(element + 2) = <span class='str_literal'>'t'</span>;<br />
+1397 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+1398 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+1399 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <br />
+1400 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(void) strcat (catpath, <span class='str_literal'>"/"</span>);<br />
+1401 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(void) strcat (catpath, element);<br />
+1402 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+1403 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (manpath);<br />
+1404 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> catpath;<br />
+1405 }<br />
+1406 <br />
+</body>
+</html>

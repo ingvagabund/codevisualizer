@@ -1,0 +1,59 @@
+* {font-family: Courier New; font-size: 11pt;}
+span.comment {border: 0pt solid #000; background-color: steelblue; color: #fff;}
+
+span.fold_button
+{margin-left: 10pt; color: #fff; background-color: violet;}
+
+div.fold
+{border: 1px solid #000; margin-bottom: 0px;}
+
+span.fold_text
+{margin-left: 10px; background-color: green; color: #fff; padding: 0px 5px;}
+
+span.highlight
+{background-color: #f60; color: #fff;}
+
+span.highlight_text
+{margin-left: 10px; background-color: brown; color: #fff; border: 1px solid pink; padding: 0px 2px;}
+
+span.needinfo
+{background-color: olivedrab; color: #fff;}
+
+span.needinfo_text
+{margin-left: 10px; background-color: maroon; color: #fff; border: 1px solid pink; padding: 0px 2px;}
+
+span.needinfo_text b
+{color: orange;}
+
+span.switch,
+span.case,
+span.break,
+span.continue,
+span.if,
+span.else,
+span.while,
+span.for,
+span.static,
+span.struct,
+span.int,
+span.double,
+span.float,
+span.signed,
+span.unsigned,
+span.char,
+span.const,
+span.return
+{color: blue;}
+
+span.include,
+span.ifdef,
+span.endif,
+span.ifndef,
+span.sharpelse,
+span.define
+{color: green;}
+
+span.str_literal
+{color: orange;}
+
+

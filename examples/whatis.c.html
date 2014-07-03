@@ -1,0 +1,1014 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="../layout/vis.css" />
+<script type="text/javascript" src="../layout/jquery-1.9.1.js"></script>
+<script type="text/javascript" src="../layout/vis.js"></script>
+<script type="text/javascript">
+<!--
+$(document).ready(function() { $('span.fold_off').hide(); })
+// -->
+</script>
+</head>
+<body>
+&nbsp;&nbsp;&nbsp;1 /*<br />
+&nbsp;&nbsp;&nbsp;2  * whatis.c: search the index or whatis database(s) <span class='for'>for</span> words.<br />
+&nbsp;&nbsp;&nbsp;3  *  <br />
+&nbsp;&nbsp;&nbsp;4  * Copyright (C) 1994, 1995 Graeme W. Wilford. (Wilf.)<br />
+&nbsp;&nbsp;&nbsp;5  * Copyright (C) 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011,<br />
+&nbsp;&nbsp;&nbsp;6  *               2012 Colin Watson.<br />
+&nbsp;&nbsp;&nbsp;7  *<br />
+&nbsp;&nbsp;&nbsp;8  * This file is part of man-db.<br />
+&nbsp;&nbsp;&nbsp;9  *<br />
+&nbsp;&nbsp;10  * man-db is free software; you can redistribute it and/or modify it<br />
+&nbsp;&nbsp;11  * under the terms of the GNU General Public License as published by<br />
+&nbsp;&nbsp;12  * the Free Software Foundation; either version 2 of the License, or<br />
+&nbsp;&nbsp;13  * (at your option) any later version.<br />
+&nbsp;&nbsp;14  *<br />
+&nbsp;&nbsp;15  * man-db is distributed in the hope that it will be useful, but<br />
+&nbsp;&nbsp;16  * WITHOUT ANY WARRANTY; without even the implied warranty of<br />
+&nbsp;&nbsp;17  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the<br />
+&nbsp;&nbsp;18  * GNU General Public License <span class='for'>for</span> more details.<br />
+&nbsp;&nbsp;19  *<br />
+&nbsp;&nbsp;20  * You should have received a copy of the GNU General Public License<br />
+&nbsp;&nbsp;21  * along with man-db; <span class='if'>if</span> not, write to the Free Software Foundation,<br />
+&nbsp;&nbsp;22  * Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA<br />
+&nbsp;&nbsp;23  *<br />
+&nbsp;&nbsp;24  * routines <span class='for'>for</span> whatis and apropos programs. Whatis looks up the <br />
+&nbsp;&nbsp;25  * keyword <span class='for'>for</span> the description, apropos searches the entire database <br />
+&nbsp;&nbsp;26  * <span class='for'>for</span> word matches.<br />
+&nbsp;&nbsp;27  *<br />
+&nbsp;&nbsp;28  * Mon Aug  8 20:35:30 BST 1994  Wilf. (G.Wilford@ee.surrey.ac.uk) <br />
+&nbsp;&nbsp;29  *<br />
+&nbsp;&nbsp;30  * CJW: Add more safety in the face of corrupted databases.<br />
+&nbsp;&nbsp;31  */<br />
+&nbsp;&nbsp;32 <br />
+&nbsp;&nbsp;33 <span class='ifdef'>#ifdef</span> HAVE_CONFIG_H<br />
+&nbsp;&nbsp;34 #  include <span class='str_literal'>"config.h"</span><br />
+&nbsp;&nbsp;35 <span class='endif'>#endif</span> /* HAVE_CONFIG_H */<br />
+&nbsp;&nbsp;36 <br />
+&nbsp;&nbsp;37 <span class='include'>#include</span> &lt;stdlib.h&gt;<br />
+&nbsp;&nbsp;38 <span class='include'>#include</span> &lt;string.h&gt;<br />
+&nbsp;&nbsp;39 <span class='include'>#include</span> &lt;stdio.h&gt;<br />
+&nbsp;&nbsp;40 <span class='include'>#include</span> &lt;ctype.h&gt;<br />
+&nbsp;&nbsp;41 <span class='include'>#include</span> &lt;errno.h&gt;<br />
+&nbsp;&nbsp;42 <span class='include'>#include</span> &lt;unistd.h&gt;<br />
+&nbsp;&nbsp;43 <br />
+&nbsp;&nbsp;44 <span class='include'>#include</span> <span class='str_literal'>"gettext.h"</span><br />
+&nbsp;&nbsp;45 <span class='include'>#include</span> &lt;locale.h&gt;<br />
+&nbsp;&nbsp;46 <span class='define'>#define</span> _(String) gettext (String)<br />
+&nbsp;&nbsp;47 <span class='define'>#define</span> N_(String) gettext_noop (String)<br />
+&nbsp;&nbsp;48 <br />
+&nbsp;&nbsp;49 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;&nbsp;50 #  include &lt;iconv.h&gt;<br />
+&nbsp;&nbsp;51 <span class='endif'>#endif</span> /* HAVE_ICONV */<br />
+&nbsp;&nbsp;52 <br />
+&nbsp;&nbsp;53 <span class='include'>#include</span> &lt;sys/types.h&gt;<br />
+&nbsp;&nbsp;54 <span class='include'>#include</span> &lt;sys/stat.h&gt;<br />
+&nbsp;&nbsp;55 <span class='include'>#include</span> <span class='str_literal'>"regex.h"</span><br />
+&nbsp;&nbsp;56 <br />
+&nbsp;&nbsp;57 <span class='include'>#include</span> <span class='str_literal'>"argp.h"</span><br />
+&nbsp;&nbsp;58 <span class='include'>#include</span> <span class='str_literal'>"dirname.h"</span><br />
+&nbsp;&nbsp;59 <span class='include'>#include</span> <span class='str_literal'>"fnmatch.h"</span><br />
+&nbsp;&nbsp;60 <span class='include'>#include</span> <span class='str_literal'>"xvasprintf.h"</span><br />
+&nbsp;&nbsp;61 <br />
+&nbsp;&nbsp;62 <span class='include'>#include</span> <span class='str_literal'>"manconfig.h"</span><br />
+&nbsp;&nbsp;63 <br />
+&nbsp;&nbsp;64 <span class='include'>#include</span> <span class='str_literal'>"cleanup.h"</span><br />
+&nbsp;&nbsp;65 <span class='include'>#include</span> <span class='str_literal'>"error.h"</span><br />
+&nbsp;&nbsp;66 <span class='include'>#include</span> <span class='str_literal'>"pipeline.h"</span><br />
+&nbsp;&nbsp;67 <span class='include'>#include</span> <span class='str_literal'>"pathsearch.h"</span><br />
+&nbsp;&nbsp;68 <span class='include'>#include</span> <span class='str_literal'>"linelength.h"</span><br />
+&nbsp;&nbsp;69 <span class='include'>#include</span> <span class='str_literal'>"hashtable.h"</span><br />
+&nbsp;&nbsp;70 <span class='include'>#include</span> <span class='str_literal'>"lower.h"</span><br />
+&nbsp;&nbsp;71 <span class='include'>#include</span> <span class='str_literal'>"wordfnmatch.h"</span><br />
+&nbsp;&nbsp;72 <span class='include'>#include</span> <span class='str_literal'>"xregcomp.h"</span><br />
+&nbsp;&nbsp;73 <span class='include'>#include</span> <span class='str_literal'>"encodings.h"</span><br />
+&nbsp;&nbsp;74 <br />
+&nbsp;&nbsp;75 <span class='include'>#include</span> <span class='str_literal'>"mydbm.h"</span><br />
+&nbsp;&nbsp;76 <span class='include'>#include</span> <span class='str_literal'>"db_storage.h"</span><br />
+&nbsp;&nbsp;77 <br />
+&nbsp;&nbsp;78 <span class='include'>#include</span> <span class='str_literal'>"manp.h"</span><br />
+&nbsp;&nbsp;79 <br />
+&nbsp;&nbsp;80 <span class='static'>static</span> <span class='char'>char</span> *manpathlist[MAXDIRS];<br />
+&nbsp;&nbsp;81 <br />
+&nbsp;&nbsp;82 extern <span class='char'>char</span> *user_config_file;<br />
+&nbsp;&nbsp;83 <span class='static'>static</span> <span class='char'>char</span> **keywords;<br />
+&nbsp;&nbsp;84 <span class='static'>static</span> <span class='int'>int</span> num_keywords;<br />
+&nbsp;&nbsp;85 <br />
+&nbsp;&nbsp;86 <span class='char'>char</span> *program_name;<br />
+&nbsp;&nbsp;87 <span class='int'>int</span> am_apropos;<br />
+&nbsp;&nbsp;88 <span class='char'>char</span> *database;<br />
+&nbsp;&nbsp;89 MYDBM_FILE dbf;<br />
+&nbsp;&nbsp;90 <span class='int'>int</span> quiet = 1;<br />
+&nbsp;&nbsp;91 <br />
+&nbsp;&nbsp;92 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;&nbsp;93 iconv_t conv_to_locale;<br />
+&nbsp;&nbsp;94 <span class='endif'>#endif</span> /* HAVE_ICONV */<br />
+&nbsp;&nbsp;95 <br />
+&nbsp;&nbsp;96 <span class='static'>static</span> regex_t *preg;  <br />
+&nbsp;&nbsp;97 <span class='static'>static</span> <span class='int'>int</span> regex_opt;<br />
+&nbsp;&nbsp;98 <span class='static'>static</span> <span class='int'>int</span> exact;<br />
+&nbsp;&nbsp;99 <br />
+&nbsp;100 <span class='static'>static</span> <span class='int'>int</span> wildcard;<br />
+&nbsp;101 <br />
+&nbsp;102 <span class='static'>static</span> <span class='int'>int</span> require_all;<br />
+&nbsp;103 <br />
+&nbsp;104 <span class='static'>static</span> <span class='int'>int</span> long_output;<br />
+&nbsp;105 <br />
+&nbsp;106 <span class='static'>static</span> <span class='char'>char</span> **sections;<br />
+&nbsp;107 <br />
+&nbsp;108 <span class='static'>static</span> <span class='char'>char</span> *manp = NULL;<br />
+&nbsp;109 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> *alt_systems = <span class='str_literal'>""</span>;<br />
+&nbsp;110 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> *locale = NULL;<br />
+&nbsp;111 <span class='static'>static</span> <span class='char'>char</span> *multiple_locale = NULL, *internal_locale;<br />
+&nbsp;112 <br />
+&nbsp;113 <span class='static'>static</span> <span class='struct'>struct</span> hashtable *display_seen = NULL;<br />
+&nbsp;114 <br />
+&nbsp;115 <span class='const'>const</span> <span class='char'>char</span> *argp_program_version; /* initialised in main */<br />
+&nbsp;116 <span class='const'>const</span> <span class='char'>char</span> *argp_program_bug_address = PACKAGE_BUGREPORT;<br />
+&nbsp;117 error_t argp_err_exit_status = FAIL;<br />
+&nbsp;118 <br />
+&nbsp;119 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> args_doc[] = N_(<span class='str_literal'>"KEYWORD..."</span>);<br />
+&nbsp;120 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> apropos_doc[] = <span class='str_literal'>"\v"</span> N_(<span class='str_literal'>"The --regex option is enabled by default."</span>);<br />
+&nbsp;121 <br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(1) })
+</script>
+<span class='fold_button fold_off fold_off_id_1' onclick='toggleFold(1)'>Unfold</span><span class='fold_button fold_on fold_on_id_1' onclick='toggleFold(1)'>Fold</span><span class='fold_text'>options structure</span><br /><div class='fold' id='fold_1'>&nbsp;122 static struct argp_option options[] = {<br />
+&nbsp;123 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"debug"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'d'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"emit debugging messages"</span>) },<br />
+&nbsp;124 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"verbose"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'v'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"print verbose warning messages"</span>) },<br />
+&nbsp;125 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"regex"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'r'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"interpret each keyword as a regex"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;10 },<br />
+&nbsp;126 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"exact"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'e'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"search each keyword <span class='for'>for</span> exact match"</span>) }, /* apropos only */<br />
+&nbsp;127 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"wildcard"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'w'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"the keyword(s) contain wildcards"</span>) },<br />
+&nbsp;128 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"and"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'a'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"require all keywords to match"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;20 }, /* apropos only */<br />
+&nbsp;129 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"long"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'l'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"do not trim output to terminal width"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;30 },<br />
+&nbsp;130 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"sections"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'s'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"LIST"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"search only these sections (colon-separated)"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;40 },<br />
+&nbsp;131 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"section"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;OPTION_ALIAS },<br />
+&nbsp;132 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"systems"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'m'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"SYSTEM"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"use manual pages from other systems"</span>) },<br />
+&nbsp;133 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"manpath"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'M'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"PATH"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"set search path <span class='for'>for</span> manual pages to PATH"</span>) },<br />
+&nbsp;134 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"locale"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'L'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"LOCALE"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"define the locale <span class='for'>for</span> this search"</span>) },<br />
+&nbsp;135 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"config-file"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'C'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"FILE"</span>),&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;N_(<span class='str_literal'>"use this user configuration file"</span>) },<br />
+&nbsp;136 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"whatis"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'f'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;OPTION_HIDDEN,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0 },<br />
+&nbsp;137 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ <span class='str_literal'>"apropos"</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'k'</span>,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;OPTION_HIDDEN,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0 },<br />
+&nbsp;138 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ 0, <span class='str_literal'>'h'</span>, 0, OPTION_HIDDEN, 0 }, /* compatibility <span class='for'>for</span> --help */<br />
+&nbsp;139 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{ 0 }<br />
+&nbsp;140 };</div>
+&nbsp;141 <span class='comment'>// "1:2:...:5" => {"1", "2", ..., "5"}</span><br />
+&nbsp;142 <span class='static'>static</span> <span class='char'>char</span> **split_sections (const <span class='char'>char</span> *sections_str)<br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(2) })
+</script>
+<span class='fold_button fold_off fold_off_id_2' onclick='toggleFold(2)'>Unfold</span><span class='fold_button fold_on fold_on_id_2' onclick='toggleFold(2)'>Fold</span><span class='fold_text'>from sections string get individual sections</span><br /><div class='fold' id='fold_2'>&nbsp;143 {<br />
+&nbsp;144 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i = 0;<br />
+&nbsp;145 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *str = xstrdup (sections_str);<br />
+&nbsp;146 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *section;<br />
+&nbsp;147 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **out = NULL;<br />
+&nbsp;148 <br />
+&nbsp;149 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Although this is documented as colon-separated, at least Solaris<br />
+&nbsp;150 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * man's -s option takes a comma-separated list, so we accept that<br />
+&nbsp;151 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * too <span class='for'>for</span> compatibility.<br />
+&nbsp;152 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;153 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (section = strtok (str, <span class='str_literal'>":,"</span>); section;<br />
+&nbsp;154 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     section = strtok (NULL, <span class='str_literal'>":,"</span>)) {<br />
+&nbsp;155 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;out = xnrealloc (out, i + 2, sizeof *out);<br />
+&nbsp;156 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;out[i++] = xstrdup (section);<br />
+&nbsp;157 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;158 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (i)<br />
+&nbsp;159 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;out[i] = NULL;<br />
+&nbsp;160 <br />
+&nbsp;161 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (str);<br />
+&nbsp;162 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> out;<br />
+&nbsp;163 }</div>
+&nbsp;164 <br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(3) })
+</script>
+<span class='fold_button fold_off fold_off_id_3' onclick='toggleFold(3)'>Unfold</span><span class='fold_button fold_on fold_on_id_3' onclick='toggleFold(3)'>Fold</span><span class='fold_text'>options parsing</span><br /><div class='fold' id='fold_3'>&nbsp;165 static error_t parse_opt (int key, char *arg, struct argp_state *state)<br />
+&nbsp;166 {<br />
+&nbsp;167 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='switch'>switch</span> (key) {<br />
+&nbsp;168 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'d'</span>:<br />
+&nbsp;169 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug_level = 1;<br />
+&nbsp;170 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;171 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'v'</span>:<br />
+&nbsp;172 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;quiet = 0;<br />
+&nbsp;173 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;174 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'r'</span>:<br />
+&nbsp;175 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;regex_opt = 1;<br />
+&nbsp;176 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;177 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'e'</span>:<br />
+&nbsp;178 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Only makes sense <span class='for'>for</span> apropos, but has<br />
+&nbsp;179 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * historically been accepted by whatis anyway.<br />
+&nbsp;180 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;181 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;regex_opt = 0;<br />
+&nbsp;182 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exact = 1;<br />
+&nbsp;183 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;184 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'w'</span>:<br />
+&nbsp;185 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;regex_opt = 0;<br />
+&nbsp;186 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;wildcard = 1;<br />
+&nbsp;187 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;188 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'a'</span>:<br />
+&nbsp;189 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos)<br />
+&nbsp;190 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;require_all = 1;<br />
+&nbsp;191 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;192 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;argp_usage (state);<br />
+&nbsp;193 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;194 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'l'</span>:<br />
+&nbsp;195 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;long_output = 1;<br />
+&nbsp;196 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;197 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'s'</span>:<br />
+&nbsp;198 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sections = split_sections (arg);<br />
+&nbsp;199 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;200 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'m'</span>:<br />
+&nbsp;201 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;alt_systems = arg;<br />
+&nbsp;202 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;203 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'M'</span>:<br />
+&nbsp;204 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manp = xstrdup (arg);<br />
+&nbsp;205 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;206 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'L'</span>:<br />
+&nbsp;207 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale = arg;<br />
+&nbsp;208 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;209 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'C'</span>:<br />
+&nbsp;210 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;user_config_file = arg;<br />
+&nbsp;211 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;212 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'f'</span>:<br />
+&nbsp;213 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* helpful override <span class='if'>if</span> program name detection fails */<br />
+&nbsp;214 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;am_apropos = 0;<br />
+&nbsp;215 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;216 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'k'</span>:<br />
+&nbsp;217 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* helpful override <span class='if'>if</span> program name detection fails */<br />
+&nbsp;218 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;am_apropos = 1;<br />
+&nbsp;219 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;220 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> <span class='str_literal'>'h'</span>:<br />
+&nbsp;221 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;argp_state_help (state, state-&gt;out_stream,<br />
+&nbsp;222 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ARGP_HELP_STD_HELP &amp;<br />
+&nbsp;223 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ~ARGP_HELP_PRE_DOC);<br />
+&nbsp;224 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+&nbsp;225 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> ARGP_KEY_ARGS:<br />
+&nbsp;226 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;keywords = state-&gt;argv + state-&gt;next;<br />
+&nbsp;227 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;num_keywords = state-&gt;argc - state-&gt;next;<br />
+&nbsp;228 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;229 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> ARGP_KEY_NO_ARGS:<br />
+&nbsp;230 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Make sure that we have a keyword! */<br />
+&nbsp;231 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;printf (_(<span class='str_literal'>"%s what?\n"</span>), program_name);<br />
+&nbsp;232 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exit (FAIL);<br />
+&nbsp;233 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='case'>case</span> ARGP_KEY_SUCCESS:<br />
+&nbsp;234 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos &amp;&amp; !exact &amp;&amp; !wildcard)<br />
+&nbsp;235 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;regex_opt = 1;<br />
+&nbsp;236 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;237 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;238 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> ARGP_ERR_UNKNOWN;<br />
+&nbsp;239 }</div>
+&nbsp;240 <br />
+&nbsp;241 <span class='static'>static</span> <span class='struct'>struct</span> argp apropos_argp = { options, parse_opt, args_doc, apropos_doc };<br />
+&nbsp;242 <span class='static'>static</span> <span class='struct'>struct</span> argp whatis_argp = { options, parse_opt, args_doc };<br />
+&nbsp;243 <br />
+&nbsp;244 <span class='static'>static</span> <span class='char'>char</span> *locale_manpath (const <span class='char'>char</span> *manpath)<br />
+&nbsp;245 {<br />
+&nbsp;246 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *all_locales;<br />
+&nbsp;247 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *new_manpath;<br />
+&nbsp;248 <br />
+&nbsp;249 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (multiple_locale &amp;&amp; *multiple_locale) {<br />
+&nbsp;250 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (internal_locale &amp;&amp; *internal_locale)<br />
+&nbsp;251 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;all_locales = xasprintf (<span class='str_literal'>"%s:%s"</span>, multiple_locale,<br />
+&nbsp;252 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; internal_locale);<br />
+&nbsp;253 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;254 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;all_locales = xstrdup (multiple_locale);<br />
+&nbsp;255 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;256 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (internal_locale &amp;&amp; *internal_locale)<br />
+&nbsp;257 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;all_locales = xstrdup (internal_locale);<br />
+&nbsp;258 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;259 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;all_locales = NULL;<br />
+&nbsp;260 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;261 <br />
+&nbsp;262 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;new_manpath = add_nls_manpaths (manpath, all_locales);<br />
+&nbsp;263 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (all_locales);<br />
+&nbsp;264 <br />
+&nbsp;265 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> new_manpath;<br />
+&nbsp;266 }<br />
+&nbsp;267 <br />
+&nbsp;268 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;269 <span class='static'>static</span> <span class='char'>char</span> *simple_convert (iconv_t conv, <span class='char'>char</span> *string)<br />
+&nbsp;270 {<br />
+&nbsp;271 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (conv != (iconv_t) -1) {<br />
+&nbsp;272 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t string_conv_alloc = strlen (string) + 1;<br />
+&nbsp;273 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *string_conv = xmalloc (string_conv_alloc);<br />
+&nbsp;274 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (;;) {<br />
+&nbsp;275 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *inptr = string, *outptr = string_conv;<br />
+&nbsp;276 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t inleft = strlen (string);<br />
+&nbsp;277 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t outleft = string_conv_alloc - 1;<br />
+&nbsp;278 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (iconv (conv, (ICONV_CONST <span class='char'>char</span> **) &amp;inptr, &amp;inleft,<br />
+&nbsp;279 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   &amp;outptr, &amp;outleft) == (size_t) -1 &amp;&amp;<br />
+&nbsp;280 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    errno == E2BIG) {<br />
+&nbsp;281 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string_conv_alloc &lt;&lt;= 1;<br />
+&nbsp;282 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string_conv = xrealloc (string_conv,<br />
+&nbsp;283 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string_conv_alloc);<br />
+&nbsp;284 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;285 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Either we succeeded, or we've done our<br />
+&nbsp;286 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * best; go ahead and print what we've got.<br />
+&nbsp;287 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;288 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string_conv[string_conv_alloc - 1 - outleft] =<br />
+&nbsp;289 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>'\0'</span>;<br />
+&nbsp;290 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+&nbsp;291 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;292 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;293 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> string_conv;<br />
+&nbsp;294 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;295 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (string);<br />
+&nbsp;296 }<br />
+&nbsp;297 <span class='else'>#else</span> /* !HAVE_ICONV */<br />
+&nbsp;298 #  define simple_convert(conv, string) xstrdup (string)<br />
+&nbsp;299 <span class='endif'>#endif</span> /* HAVE_ICONV */<br />
+&nbsp;300 <br />
+&nbsp;301 /* Do the old thing, <span class='if'>if</span> we cannot find the relevant database.<br />
+&nbsp;302  * This invokes grep once per argument; we can't <span class='do'>do</span> much about this because<br />
+&nbsp;303  * we need to know which arguments failed.  The only way to speed this up<br />
+&nbsp;304  * would be to implement grep internally, but it hardly seems worth it <span class='for'>for</span> a<br />
+&nbsp;305  * legacy mechanism.<br />
+&nbsp;306  */<br />
+&nbsp;307 <span class='static'>static</span> <span class='void'>void</span> use_grep (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='int'>int</span> num_pages, <span class='char'>char</span> *manpath,<br />
+&nbsp;308 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      <span class='int'>int</span> *found)<br />
+&nbsp;309 {<br />
+&nbsp;310 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *whatis_file = xasprintf (<span class='str_literal'>"%s/whatis"</span>, manpath);<br />
+&nbsp;311 <br />
+&nbsp;312 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (access (whatis_file, R_OK) == 0) {<br />
+&nbsp;313 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *flags;<br />
+&nbsp;314 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;315 <br />
+&nbsp;316 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos) {<br />
+&nbsp;317 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt)<br />
+&nbsp;318 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flags = get_def_user (<br />
+&nbsp;319 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='str_literal'>"apropos_regex_grep_flags"</span>,<br />
+&nbsp;320 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;APROPOS_REGEX_GREP_FLAGS);<br />
+&nbsp;321 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;322 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flags = get_def_user (<span class='str_literal'>"apropos_grep_flags"</span>,<br />
+&nbsp;323 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      APROPOS_GREP_FLAGS);<br />
+&nbsp;324 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;325 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flags = get_def_user (<span class='str_literal'>"whatis_grep_flags"</span>,<br />
+&nbsp;326 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      WHATIS_GREP_FLAGS);<br />
+&nbsp;327 <br />
+&nbsp;328 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;329 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pipeline *grep_pl;<br />
+&nbsp;330 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pipecmd *grep_cmd;<br />
+&nbsp;331 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *anchored_page;<br />
+&nbsp;332 <br />
+&nbsp;333 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos)<br />
+&nbsp;334 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;anchored_page = xstrdup (pages[i]);<br />
+&nbsp;335 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;336 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;anchored_page = xasprintf (<span class='str_literal'>"^%s"</span>, pages[i]);<br />
+&nbsp;337 <br />
+&nbsp;338 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;grep_cmd = pipecmd_new_argstr (get_def_user (<span class='str_literal'>"grep"</span>,<br />
+&nbsp;339 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     GREP));<br />
+&nbsp;340 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pipecmd_argstr (grep_cmd, flags);<br />
+&nbsp;341 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pipecmd_args (grep_cmd, anchored_page, whatis_file,<br />
+&nbsp;342 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      NULL);<br />
+&nbsp;343 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;grep_pl = pipeline_new_commands (grep_cmd, NULL);<br />
+&nbsp;344 <br />
+&nbsp;345 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (pipeline_run (grep_pl) == 0)<br />
+&nbsp;346 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = 1;<br />
+&nbsp;347 <br />
+&nbsp;348 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (anchored_page);<br />
+&nbsp;349 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;350 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;351 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"warning: can't read the fallback whatis text database "</span><br />
+&nbsp;352 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='str_literal'>"%s/whatis\n"</span>, manpath);<br />
+&nbsp;353 <br />
+&nbsp;354 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (whatis_file);<br />
+&nbsp;355 }<br />
+&nbsp;356 <br />
+&nbsp;357 <span class='static'>static</span> <span class='struct'>struct</span> mandata *resolve_pointers (struct mandata *info,<br />
+&nbsp;358 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='const'>const</span> <span class='char'>char</span> *page)<br />
+&nbsp;359 {<br />
+&nbsp;360 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> rounds;<br />
+&nbsp;361 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *newpage;<br />
+&nbsp;362 <br />
+&nbsp;363 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*(info-&gt;pointer) == <span class='str_literal'>'-'</span> ||<br />
+&nbsp;364 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    ((!info-&gt;name || STREQ (info-&gt;name, page)) &amp;&amp;<br />
+&nbsp;365 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     STREQ (info-&gt;pointer, page)))<br />
+&nbsp;366 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> info;<br />
+&nbsp;367 <br />
+&nbsp;368 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Now we have to work through pointers. The limit of 10 is fairly<br />
+&nbsp;369 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * arbitrary: it's just there to avoid an infinite loop.<br />
+&nbsp;370 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;371 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newpage = info-&gt;pointer;<br />
+&nbsp;372 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;info = dblookup_exact (newpage, info-&gt;ext, 1);<br />
+&nbsp;373 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (rounds = 0; rounds &lt; 10; rounds++) {<br />
+&nbsp;374 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> mandata *newinfo;<br />
+&nbsp;375 <br />
+&nbsp;376 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* If the pointer lookup fails, <span class='do'>do</span> nothing. */<br />
+&nbsp;377 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!info)<br />
+&nbsp;378 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+&nbsp;379 <br />
+&nbsp;380 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*(info-&gt;pointer) == <span class='str_literal'>'-'</span> ||<br />
+&nbsp;381 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    ((!info-&gt;name || STREQ (info-&gt;name, newpage)) &amp;&amp;<br />
+&nbsp;382 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     STREQ (info-&gt;pointer, newpage)))<br />
+&nbsp;383 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> info;<br />
+&nbsp;384 <br />
+&nbsp;385 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newinfo = dblookup_exact (info-&gt;pointer, info-&gt;ext, 1);<br />
+&nbsp;386 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_mandata_struct (info);<br />
+&nbsp;387 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;info = newinfo;<br />
+&nbsp;388 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;389 <br />
+&nbsp;390 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet)<br />
+&nbsp;391 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: %s contains a pointer loop"</span>), page);<br />
+&nbsp;392 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
+&nbsp;393 }<br />
+&nbsp;394 <br />
+&nbsp;395 /* fill_in_whatis() is really a ../libdb/db_lookup.c routine but whatis.c<br />
+&nbsp;396    is the only file that actually requires access to the whatis text... */<br />
+&nbsp;397    <br />
+&nbsp;398 /* Take mandata <span class='struct'>struct</span> (earlier returned from a dblookup()) and <span class='return'>return</span> <br />
+&nbsp;399    the relative whatis */<br />
+&nbsp;400 <span class='static'>static</span> <span class='char'>char</span> *get_whatis (struct mandata *info, <span class='const'>const</span> <span class='char'>char</span> *page)<br />
+&nbsp;401 {<br />
+&nbsp;402 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!info)<br />
+&nbsp;403 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (_(<span class='str_literal'>"(unknown subject)"</span>));<br />
+&nbsp;404 <br />
+&nbsp;405 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* See <span class='if'>if</span> we need to fill in the whatis here. */<br />
+&nbsp;406 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (info-&gt;whatis != NULL &amp;&amp; *(info-&gt;whatis))<br />
+&nbsp;407 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (info-&gt;whatis);<br />
+&nbsp;408 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!quiet &amp;&amp; *(info-&gt;pointer) != <span class='str_literal'>'-'</span>)<br />
+&nbsp;409 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (0, 0, _(<span class='str_literal'>"warning: %s contains a pointer loop"</span>),<br />
+&nbsp;410 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       page);<br />
+&nbsp;411 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (_(<span class='str_literal'>"(unknown subject)"</span>));<br />
+&nbsp;412 }<br />
+&nbsp;413 <br />
+&nbsp;414 /* print out any matches found */<br />
+&nbsp;415 <span class='static'>static</span> <span class='void'>void</span> display (struct mandata *info, <span class='const'>const</span> <span class='char'>char</span> *page)<br />
+&nbsp;416 {<br />
+&nbsp;417 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> mandata *newinfo;<br />
+&nbsp;418 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *string, *whatis, *string_conv;<br />
+&nbsp;419 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *page_name;<br />
+&nbsp;420 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *key;<br />
+&nbsp;421 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> line_len, rest;<br />
+&nbsp;422 <br />
+&nbsp;423 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newinfo = resolve_pointers (info, page);<br />
+&nbsp;424 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;whatis = get_whatis (newinfo, page);<br />
+&nbsp;425 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (newinfo == NULL)<br />
+&nbsp;426 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newinfo = info;<br />
+&nbsp;427 <br />
+&nbsp;428 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dbprintf (newinfo);<br />
+&nbsp;429 <br />
+&nbsp;430 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (newinfo-&gt;name)<br />
+&nbsp;431 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;page_name = newinfo-&gt;name;<br />
+&nbsp;432 <span class='else'>else</span><br />
+&nbsp;433 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;page_name = page;<br />
+&nbsp;434 <br />
+&nbsp;435 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;key = xasprintf (<span class='str_literal'>"%s (%s)"</span>, page_name, newinfo-&gt;ext);<br />
+&nbsp;436 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (hashtable_lookup_structure (display_seen, key, strlen (key)))<br />
+&nbsp;437 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto out;<br />
+&nbsp;438 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hashtable_install (display_seen, key, strlen (key), NULL);<br />
+&nbsp;439 <br />
+&nbsp;440 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;line_len = get_line_length ();<br />
+&nbsp;441 <br />
+&nbsp;442 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strlen (page_name) &gt; (size_t) (line_len / 2))<br />
+&nbsp;443 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = xasprintf (<span class='str_literal'>"%.*s..."</span>, line_len / 2 - 3, page_name);<br />
+&nbsp;444 <span class='else'>else</span><br />
+&nbsp;445 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = xstrdup (page_name);<br />
+&nbsp;446 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = appendstr (string, <span class='str_literal'>" ("</span>, newinfo-&gt;ext, <span class='str_literal'>")"</span>, NULL);<br />
+&nbsp;447 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!STREQ (newinfo-&gt;pointer, <span class='str_literal'>"-"</span>) &amp;&amp; !STREQ (newinfo-&gt;pointer, page))<br />
+&nbsp;448 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = appendstr (string, <span class='str_literal'>" ["</span>, newinfo-&gt;pointer, <span class='str_literal'>"]"</span>, NULL);<br />
+&nbsp;449 <br />
+&nbsp;450 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strlen (string) &lt; (size_t) 20) {<br />
+&nbsp;451 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;452 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = xrealloc (string, 21);<br />
+&nbsp;453 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = strlen (string); i &lt; 20; ++i)<br />
+&nbsp;454 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string[i] = <span class='str_literal'>' '</span>;<br />
+&nbsp;455 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string[i] = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;456 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;457 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = appendstr (string, <span class='str_literal'>" - "</span>, NULL);<br />
+&nbsp;458 <br />
+&nbsp;459 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;rest = line_len - strlen (string);<br />
+&nbsp;460 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!long_output &amp;&amp; strlen (whatis) &gt; (size_t) rest) {<br />
+&nbsp;461 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;whatis[rest - 3] = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;462 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = appendstr (string, whatis, <span class='str_literal'>"...\n"</span>, NULL);<br />
+&nbsp;463 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;464 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string = appendstr (string, whatis, <span class='str_literal'>"\n"</span>, NULL);<br />
+&nbsp;465 <br />
+&nbsp;466 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;string_conv = simple_convert (conv_to_locale, string);<br />
+&nbsp;467 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fputs (string_conv, stdout);<br />
+&nbsp;468 <br />
+&nbsp;469 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (string_conv);<br />
+&nbsp;470 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (string);<br />
+&nbsp;471 <br />
+&nbsp;472 out:<br />
+&nbsp;473 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (key);<br />
+&nbsp;474 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (whatis);<br />
+&nbsp;475 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (newinfo != info)<br />
+&nbsp;476 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_mandata_struct (newinfo);<br />
+&nbsp;477 }<br />
+&nbsp;478 <br />
+&nbsp;479 /* lookup the page and display the results */<br />
+&nbsp;480 <span class='static'>static</span> inline <span class='int'>int</span> do_whatis_section (const <span class='char'>char</span> *page, <span class='const'>const</span> <span class='char'>char</span> *section)<br />
+&nbsp;481 {<br />
+&nbsp;482 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> mandata *info;<br />
+&nbsp;483 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> count = 0;<br />
+&nbsp;484 <br />
+&nbsp;485 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;info = dblookup_all (page, section, 0);<br />
+&nbsp;486 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (info) {<br />
+&nbsp;487 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> mandata *pinfo;<br />
+&nbsp;488 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;489 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;display (info, page);<br />
+&nbsp;490 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;count++;<br />
+&nbsp;491 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pinfo = info-&gt;next;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* go on to next structure */<br />
+&nbsp;492 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_mandata_elements (info);<br />
+&nbsp;493 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (info);<br />
+&nbsp;494 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;info = pinfo;<br />
+&nbsp;495 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;496 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> count;<br />
+&nbsp;497 }<br />
+&nbsp;498 <br />
+&nbsp;499 <span class='static'>static</span> <span class='int'>int</span> suitable_manpath (const <span class='char'>char</span> *manpath, <span class='const'>const</span> <span class='char'>char</span> *page_dir)<br />
+&nbsp;500 {<br />
+&nbsp;501 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *page_manp, *pm;<br />
+&nbsp;502 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *page_manpathlist[MAXDIRS], **mp;<br />
+&nbsp;503 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> ret;<br />
+&nbsp;504 <br />
+&nbsp;505 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;page_manp = <span class='highlight'>get_manpath</span>_from_path (page_dir, 0);<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
+&nbsp;506 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!page_manp || !*page_manp) {<br />
+&nbsp;507 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page_manp);<br />
+&nbsp;508 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;509 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;510 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pm = locale_manpath (page_manp);<br />
+&nbsp;511 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page_manp);<br />
+&nbsp;512 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;page_manp = pm;<br />
+&nbsp;513 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;create_pathlist (page_manp, page_manpathlist);<br />
+&nbsp;514 <br />
+&nbsp;515 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret = 0;<br />
+&nbsp;516 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (mp = page_manpathlist; *mp; ++mp) {<br />
+&nbsp;517 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (*mp, manpath)) {<br />
+&nbsp;518 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret = 1;<br />
+&nbsp;519 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+&nbsp;520 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;521 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;522 <br />
+&nbsp;523 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (mp = page_manpathlist; *mp; ++mp)<br />
+&nbsp;524 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (*mp);<br />
+&nbsp;525 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page_manp);<br />
+&nbsp;526 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> ret;<br />
+&nbsp;527 }<br />
+&nbsp;528 <br />
+&nbsp;529 <span class='static'>static</span> <span class='void'>void</span> do_whatis (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='int'>int</span> num_pages,<br />
+&nbsp;530 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       <span class='const'>const</span> <span class='char'>char</span> *manpath, <span class='int'>int</span> *found)<br />
+&nbsp;531 {<br />
+&nbsp;532 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;533 <br />
+&nbsp;534 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;535 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *page = xstrdup (pages[i]);<br />
+&nbsp;536 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> stat st;<br />
+&nbsp;537 <br />
+&nbsp;538 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (strchr (page, <span class='str_literal'>'/'</span>) &amp;&amp; stat (page, &amp;st) == 0 &amp;&amp;<br />
+&nbsp;539 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    !S_ISDIR (st.st_mode) &amp;&amp;<br />
+&nbsp;540 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    st.st_mode &amp; (S_IXUSR | S_IXGRP | S_IXOTH)) {<br />
+&nbsp;541 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Perhaps an executable.  If its directory is on<br />
+&nbsp;542 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * $PATH, then we only want to process this page<span class='for'>for</span><br />
+&nbsp;543 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * matching manual hierarchies.<br />
+&nbsp;544 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;545 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *page_dir = dir_name (page);<br />
+&nbsp;546 <br />
+&nbsp;547 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (directory_on_path (page_dir)) {<br />
+&nbsp;548 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (suitable_manpath (manpath, page_dir)) {<br />
+&nbsp;549 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *old_page = page;<br />
+&nbsp;550 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;page = base_name (old_page);<br />
+&nbsp;551 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (old_page);<br />
+&nbsp;552 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;553 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"%s not on manpath <span class='for'>for</span> %s\n"</span>,<br />
+&nbsp;554 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       manpath, page);<br />
+&nbsp;555 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page_dir);<br />
+&nbsp;556 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page);<br />
+&nbsp;557 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;558 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;559 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;560 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page_dir);<br />
+&nbsp;561 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;562 <br />
+&nbsp;563 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (sections) {<br />
+&nbsp;564 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> * <span class='const'>const</span> *section;<br />
+&nbsp;565 <br />
+&nbsp;566 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (section = sections; *section; ++section) {<br />
+&nbsp;567 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (do_whatis_section (page, *section))<br />
+&nbsp;568 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = 1;<br />
+&nbsp;569 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;570 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;571 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (do_whatis_section (page, NULL))<br />
+&nbsp;572 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = 1;<br />
+&nbsp;573 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;574 <br />
+&nbsp;575 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (page);<br />
+&nbsp;576 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;577 }<br />
+&nbsp;578 <br />
+&nbsp;579 <span class='static'>static</span> <span class='int'>int</span> any_set (int num_pages, <span class='int'>int</span> *found_here)<br />
+&nbsp;580 {<br />
+&nbsp;581 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;582 <br />
+&nbsp;583 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i)<br />
+&nbsp;584 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (found_here[i])<br />
+&nbsp;585 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 1;<br />
+&nbsp;586 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;587 }<br />
+&nbsp;588 <br />
+&nbsp;589 <span class='static'>static</span> <span class='int'>int</span> all_set (int num_pages, <span class='int'>int</span> *found_here)<br />
+&nbsp;590 {<br />
+&nbsp;591 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;592 <br />
+&nbsp;593 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i)<br />
+&nbsp;594 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!found_here[i])<br />
+&nbsp;595 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;596 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 1;<br />
+&nbsp;597 }<br />
+&nbsp;598 <br />
+&nbsp;599 <span class='static'>static</span> <span class='void'>void</span> parse_name (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='int'>int</span> num_pages,<br />
+&nbsp;600 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *dbname, <span class='int'>int</span> *found, <span class='int'>int</span> *found_here)<br />
+&nbsp;601 { <br />
+&nbsp;602 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;603 <br />
+&nbsp;604 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt) {<br />
+&nbsp;605 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;606 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regexec (&amp;preg[i], dbname, 0,<br />
+&nbsp;607 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     (regmatch_t *) 0, 0) == 0)<br />
+&nbsp;608 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;609 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;610 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;611 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;612 <br />
+&nbsp;613 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos &amp;&amp; !wildcard) {<br />
+&nbsp;614 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *lowdbname = lower (dbname);<br />
+&nbsp;615 <br />
+&nbsp;616 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;617 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (lowdbname, pages[i]))<br />
+&nbsp;618 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;619 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;620 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (lowdbname);<br />
+&nbsp;621 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;622 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;623 <br />
+&nbsp;624 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;625 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (fnmatch (pages[i], dbname, 0) == 0)<br />
+&nbsp;626 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;627 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;628 }<br />
+&nbsp;629 <br />
+&nbsp;630 /* <span class='return'>return</span> 1 on word match */<br />
+&nbsp;631 <span class='static'>static</span> <span class='int'>int</span> match (const <span class='char'>char</span> *lowpage, <span class='const'>const</span> <span class='char'>char</span> *whatis)<br />
+&nbsp;632 {<br />
+&nbsp;633 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *lowwhatis = lower (whatis);<br />
+&nbsp;634 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t len = strlen (lowpage);<br />
+&nbsp;635 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *p, *begin;<br />
+&nbsp;636 <br />
+&nbsp;637 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;begin = lowwhatis;<br />
+&nbsp;638 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;639 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* check <span class='for'>for</span> string match, then see <span class='if'>if</span> it is a _word_ */<br />
+&nbsp;640 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (lowwhatis &amp;&amp; (p = strstr (lowwhatis, lowpage))) {<br />
+&nbsp;641 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *left = p - 1; <br />
+&nbsp;642 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *right = p + len;<br />
+&nbsp;643 <br />
+&nbsp;644 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> ((p == begin || (!CTYPE (islower, *left) &amp;&amp; *left != <span class='str_literal'>'_'</span>)) &amp;&amp;<br />
+&nbsp;645 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    (!*right || (!CTYPE (islower, *right) &amp;&amp; *right != <span class='str_literal'>'_'</span>))) {<br />
+&nbsp;646 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (begin);<br />
+&nbsp;647 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 1;<br />
+&nbsp;648 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;649 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lowwhatis = p + 1;<br />
+&nbsp;650 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;651 <br />
+&nbsp;652 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (begin);<br />
+&nbsp;653 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 0;<br />
+&nbsp;654 }<br />
+&nbsp;655 <br />
+&nbsp;656 <span class='static'>static</span> <span class='void'>void</span> parse_whatis (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='char'>char</span> * <span class='const'>const</span> *lowpages,<br />
+&nbsp;657 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  <span class='int'>int</span> num_pages, <span class='const'>const</span> <span class='char'>char</span> *whatis,<br />
+&nbsp;658 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  <span class='int'>int</span> *found, <span class='int'>int</span> *found_here)<br />
+&nbsp;659 { <br />
+&nbsp;660 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;661 <br />
+&nbsp;662 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt) {<br />
+&nbsp;663 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;664 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regexec (&amp;preg[i], whatis, 0,<br />
+&nbsp;665 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     (regmatch_t *) 0, 0) == 0)<br />
+&nbsp;666 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;667 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;668 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;669 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;670 <br />
+&nbsp;671 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (wildcard) {<br />
+&nbsp;672 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;673 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (exact) {<br />
+&nbsp;674 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (fnmatch (pages[i], whatis, 0) == 0)<br />
+&nbsp;675 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;676 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;677 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (word_fnmatch (pages[i], whatis))<br />
+&nbsp;678 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;679 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;680 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;681 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return;<br />
+&nbsp;682 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;683 <br />
+&nbsp;684 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;685 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (match (lowpages[i], whatis))<br />
+&nbsp;686 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found[i] = found_here[i] = 1;<br />
+&nbsp;687 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;688 }<br />
+&nbsp;689 <br />
+&nbsp;690 /* cjwatson: Optimized functions don't seem to be correct in some<br />
+&nbsp;691  * circumstances; disabled <span class='for'>for</span> now.<br />
+&nbsp;692  */<br />
+&nbsp;693 #undef BTREE<br />
+&nbsp;694 <br />
+&nbsp;695 /* scan <span class='for'>for</span> the page, print any matches */<br />
+&nbsp;696 <span class='static'>static</span> <span class='void'>void</span> do_apropos (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='int'>int</span> num_pages, <span class='int'>int</span> *found)<br />
+&nbsp;697 {<br />
+&nbsp;698 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;datum key, cont;<br />
+&nbsp;699 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **lowpages;<br />
+&nbsp;700 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> *found_here;<br />
+&nbsp;701 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> (*combine) (int, <span class='int'>int</span> *);<br />
+&nbsp;702 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;703 <span class='ifndef'>#ifndef</span> BTREE<br />
+&nbsp;704 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;datum nextkey;<br />
+&nbsp;705 <span class='else'>#else</span> /* BTREE */<br />
+&nbsp;706 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> end;<br />
+&nbsp;707 <span class='endif'>#endif</span> /* !BTREE */<br />
+&nbsp;708 <br />
+&nbsp;709 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lowpages = XNMALLOC (num_pages, <span class='char'>char</span> *);<br />
+&nbsp;710 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;711 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lowpages[i] = lower (pages[i]);<br />
+&nbsp;712 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"lower(%s) = \"</span>%s\<span class='str_literal'>"\n"</span>, pages[i], lowpages[i]);<br />
+&nbsp;713 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;714 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;found_here = XNMALLOC (num_pages, int);<br />
+&nbsp;715 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;combine = require_all ? all_set : any_set;<br />
+&nbsp;716 <br />
+&nbsp;717 <span class='ifndef'>#ifndef</span> BTREE<br />
+&nbsp;718 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;key = MYDBM_FIRSTKEY (dbf);<br />
+&nbsp;719 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (MYDBM_DPTR (key)) {<br />
+&nbsp;720 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cont = MYDBM_FETCH (dbf, key);<br />
+&nbsp;721 <span class='else'>#else</span> /* BTREE */<br />
+&nbsp;722 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end = btree_nextkeydata (dbf, &amp;key, &amp;cont);<br />
+&nbsp;723 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='while'>while</span> (!end) {<br />
+&nbsp;724 <span class='endif'>#endif</span> /* !BTREE */<br />
+&nbsp;725 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *tab;<br />
+&nbsp;726 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> mandata info;<br />
+&nbsp;727 <br />
+&nbsp;728 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memset (&amp;info, 0, sizeof (info));<br />
+&nbsp;729 <br />
+&nbsp;730 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* bug#4372, NULL pointer dereference in MYDBM_DPTR (cont),<br />
+&nbsp;731 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * fix by dassen@wi.leidenuniv.nl (J.H.M.Dassen), thanx Ray.<br />
+&nbsp;732 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * cjwatson: In that case, complain and exit, otherwise we<br />
+&nbsp;733 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * might loop (bug #95052).<br />
+&nbsp;734 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;735 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!MYDBM_DPTR (cont))<br />
+&nbsp;736 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<br />
+&nbsp;737 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"key was %s\n"</span>, MYDBM_DPTR (key));<br />
+&nbsp;738 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;error (FATAL, 0,<br />
+&nbsp;739 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       _(<span class='str_literal'>"Database %s corrupted; rebuild with "</span><br />
+&nbsp;740 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class='str_literal'>"mandb --create"</span>),<br />
+&nbsp;741 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       database);<br />
+&nbsp;742 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;743 <br />
+&nbsp;744 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*MYDBM_DPTR (key) == <span class='str_literal'>'$'</span>)<br />
+&nbsp;745 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto nextpage;<br />
+&nbsp;746 <br />
+&nbsp;747 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (*MYDBM_DPTR (cont) == <span class='str_literal'>'\t'</span>)<br />
+&nbsp;748 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto nextpage;<br />
+&nbsp;749 <br />
+&nbsp;750 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* a real page */<br />
+&nbsp;751 <br />
+&nbsp;752 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;split_content (MYDBM_DPTR (cont), &amp;info);<br />
+&nbsp;753 <br />
+&nbsp;754 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* If there are sections given, does any of them match<br />
+&nbsp;755 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * either the section or extension of this page?<br />
+&nbsp;756 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
+&nbsp;757 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (sections) {<br />
+&nbsp;758 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> * <span class='const'>const</span> *section;<br />
+&nbsp;759 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> matched = 0;<br />
+&nbsp;760 <br />
+&nbsp;761 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (section = sections; *section; ++section) {<br />
+&nbsp;762 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (*section, info.sec) ||<br />
+&nbsp;763 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    STREQ (*section, info.ext)) {<br />
+&nbsp;764 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;matched = 1;<br />
+&nbsp;765 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
+&nbsp;766 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;767 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;768 <br />
+&nbsp;769 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!matched)<br />
+&nbsp;770 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;goto nextpage;<br />
+&nbsp;771 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;772 <br />
+&nbsp;773 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tab = strrchr (MYDBM_DPTR (key), <span class='str_literal'>'\t'</span>);<br />
+&nbsp;774 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (tab) <br />
+&nbsp;775 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *tab = <span class='str_literal'>'\0'</span>;<br />
+&nbsp;776 <br />
+&nbsp;777 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;memset (found_here, 0, num_pages * sizeof (*found_here));<br />
+&nbsp;778 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos) {<br />
+&nbsp;779 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *whatis;<br />
+&nbsp;780 <br />
+&nbsp;781 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;parse_name ((const <span class='char'>char</span> **) lowpages, num_pages,<br />
+&nbsp;782 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    MYDBM_DPTR (key), found, found_here);<br />
+&nbsp;783 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;whatis = info.whatis ? xstrdup (info.whatis) : NULL;<br />
+&nbsp;784 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!combine (num_pages, found_here) &amp;&amp; whatis)<br />
+&nbsp;785 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;parse_whatis (pages, lowpages, num_pages,<br />
+&nbsp;786 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;      whatis, found, found_here);<br />
+&nbsp;787 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (whatis);<br />
+&nbsp;788 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;789 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;parse_name (pages, num_pages,<br />
+&nbsp;790 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    MYDBM_DPTR (key), found, found_here);<br />
+&nbsp;791 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (combine (num_pages, found_here))<br />
+&nbsp;792 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;display (&amp;info, MYDBM_DPTR (key));<br />
+&nbsp;793 <br />
+&nbsp;794 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (tab)<br />
+&nbsp;795 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*tab = <span class='str_literal'>'\t'</span>;<br />
+&nbsp;796 nextpage:<br />
+&nbsp;797 <span class='ifndef'>#ifndef</span> BTREE<br />
+&nbsp;798 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;nextkey = MYDBM_NEXTKEY (dbf, key);<br />
+&nbsp;799 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_FREE (MYDBM_DPTR (cont));<br />
+&nbsp;800 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_FREE (MYDBM_DPTR (key));<br />
+&nbsp;801 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;key = nextkey; <br />
+&nbsp;802 <span class='else'>#else</span> /* BTREE */<br />
+&nbsp;803 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_FREE (MYDBM_DPTR (cont));<br />
+&nbsp;804 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_FREE (MYDBM_DPTR (key));<br />
+&nbsp;805 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end = btree_nextkeydata (dbf, &amp;key, &amp;cont);<br />
+&nbsp;806 <span class='endif'>#endif</span> /* !BTREE */<br />
+&nbsp;807 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;info.addr = NULL; /* == MYDBM_DPTR (cont), freed above */<br />
+&nbsp;808 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_mandata_elements (&amp;info);<br />
+&nbsp;809 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;810 <br />
+&nbsp;811 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i)<br />
+&nbsp;812 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (lowpages[i]);<br />
+&nbsp;813 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (lowpages);<br />
+&nbsp;814 }<br />
+&nbsp;815 <br />
+&nbsp;816 /* loop through the man paths, searching <span class='for'>for</span> a match */<br />
+&nbsp;817 <span class='static'>static</span> <span class='int'>int</span> search (const <span class='char'>char</span> * <span class='const'>const</span> *pages, <span class='int'>int</span> num_pages)<br />
+&nbsp;818 {<br />
+&nbsp;819 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> *found = XCALLOC (num_pages, int);<br />
+&nbsp;820 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *catpath, **mp;<br />
+&nbsp;821 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> any_found, i;<br />
+&nbsp;822 <br />
+&nbsp;823 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (mp = manpathlist; *mp; mp++) {<br />
+&nbsp;824 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;catpath = get_catpath (*mp, SYSTEM_CAT | USER_CAT);<br />
+&nbsp;825 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br />
+&nbsp;826 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (catpath) {<br />
+&nbsp;827 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;database = mkdbname (catpath);<br />
+&nbsp;828 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (catpath);<br />
+&nbsp;829 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<span class='else'>else</span><br />
+&nbsp;830 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;database = mkdbname (*mp);<br />
+&nbsp;831 <br />
+&nbsp;832 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"path=%s\n"</span>, *mp);<br />
+&nbsp;833 <br />
+&nbsp;834 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dbf = MYDBM_RDOPEN (database);<br />
+&nbsp;835 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (dbf &amp;&amp; dbver_rd (dbf)) {<br />
+&nbsp;836 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_CLOSE (dbf);<br />
+&nbsp;837 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dbf = NULL;<br />
+&nbsp;838 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;839 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!dbf) {<br />
+&nbsp;840 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;use_grep (pages, num_pages, *mp, found);<br />
+&nbsp;841 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;842 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;843 <br />
+&nbsp;844 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (am_apropos)<br />
+&nbsp;845 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;do_apropos (pages, num_pages, found);<br />
+&nbsp;846 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> {<br />
+&nbsp;847 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt || wildcard)<br />
+&nbsp;848 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;do_apropos (pages, num_pages, found);<br />
+&nbsp;849 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;850 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;do_whatis (pages, num_pages, *mp, found);<br />
+&nbsp;851 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;852 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (database);<br />
+&nbsp;853 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;database = NULL;<br />
+&nbsp;854 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MYDBM_CLOSE (dbf);<br />
+&nbsp;855 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;856 <br />
+&nbsp;857 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;chkr_garbage_detector ();<br />
+&nbsp;858 <br />
+&nbsp;859 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;any_found = 0;<br />
+&nbsp;860 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_pages; ++i) {<br />
+&nbsp;861 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (found[i])<br />
+&nbsp;862 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;any_found = 1;<br />
+&nbsp;863 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;864 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fprintf (stderr, _(<span class='str_literal'>"%s: nothing appropriate.\n"</span>),<br />
+&nbsp;865 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; pages[i]);<br />
+&nbsp;866 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;867 <br />
+&nbsp;868 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (found);<br />
+&nbsp;869 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> any_found;<br />
+&nbsp;870 }<br />
+&nbsp;871 <br />
+&nbsp;872 <span class='int'>int</span> main (int argc, <span class='char'>char</span> *argv[])<br />
+&nbsp;873 {<br />
+&nbsp;874 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;875 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *locale_charset;<br />
+&nbsp;876 #endif<br />
+&nbsp;877 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status = OK;<br />
+&nbsp;878 <br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(4) })
+</script>
+<span class='fold_button fold_off fold_off_id_4' onclick='toggleFold(4)'>Unfold</span><span class='fold_button fold_on fold_on_id_4' onclick='toggleFold(4)'>Fold</span><span class='fold_text'>detecting apropos or whatis, hidding exact and and option</span><br /><div class='fold' id='fold_4'>&nbsp;879 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;program_name = base_name (argv[0]);<br />
+&nbsp;880 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (program_name, APROPOS_NAME)) {<br />
+&nbsp;881 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;am_apropos = 1;<br />
+&nbsp;882 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;argp_program_version = <span class='str_literal'>"apropos "</span> PACKAGE_VERSION;<br />
+&nbsp;883 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
+&nbsp;884 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> argp_option *optionp;<br />
+&nbsp;885 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;am_apropos = 0;<br />
+&nbsp;886 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;argp_program_version = <span class='str_literal'>"whatis "</span> PACKAGE_VERSION;<br />
+&nbsp;887 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (optionp = (struct argp_option *) whatis_argp.options;<br />
+&nbsp;888 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     optionp-&gt;name || optionp-&gt;key || optionp-&gt;arg ||<br />
+&nbsp;889 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     optionp-&gt;flags || optionp-&gt;doc || optionp-&gt;group;<br />
+&nbsp;890 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     ++optionp) {<br />
+&nbsp;891 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!optionp-&gt;name)<br />
+&nbsp;892 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
+&nbsp;893 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (STREQ (optionp-&gt;name, <span class='str_literal'>"exact"</span>) ||<br />
+&nbsp;894 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    STREQ (optionp-&gt;name, <span class='str_literal'>"and"</span>))<br />
+&nbsp;895 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;optionp-&gt;flags |= OPTION_HIDDEN;<br />
+&nbsp;896 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;897 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+&nbsp;898 <br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(5) })
+</script>
+<span class='fold_button fold_off fold_off_id_5' onclick='toggleFold(5)'>Unfold</span><span class='fold_button fold_on fold_on_id_5' onclick='toggleFold(5)'>Fold</span><span class='fold_text'>initialization, arg parsing</span><br /><div class='fold' id='fold_5'>&nbsp;899 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;init_debug ();<br />
+&nbsp;900 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pipeline_install_post_fork (pop_all_cleanups);<br />
+&nbsp;901 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;init_locale ();<br />
+&nbsp;902 <br />
+&nbsp;903 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;internal_locale = setlocale (LC_MESSAGES, NULL);<br />
+&nbsp;904 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Use LANGUAGE only when LC_MESSAGES locale category is<br />
+&nbsp;905 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * neither <span class='str_literal'>"C"</span> nor <span class='str_literal'>"POSIX"</span>. */<br />
+&nbsp;906 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (internal_locale &amp;&amp; strcmp (internal_locale, <span class='str_literal'>"C"</span>) &amp;&amp;<br />
+&nbsp;907 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    strcmp (internal_locale, <span class='str_literal'>"POSIX"</span>))<br />
+&nbsp;908 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;multiple_locale = getenv (<span class='str_literal'>"LANGUAGE"</span>);<br />
+&nbsp;909 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;internal_locale = xstrdup (internal_locale ? internal_locale : <span class='str_literal'>"C"</span>);<br />
+&nbsp;910 <br />
+&nbsp;911 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (argp_parse (am_apropos ? &amp;apropos_argp : &amp;whatis_argp, argc, argv,<br />
+&nbsp;912 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0, 0, 0))<br />
+&nbsp;913 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exit (FAIL);</div>
+&nbsp;914 <br />
+&nbsp;915 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>read_config_file</span> (user_config_file != NULL);<span class='highlight_text'>KSIA</span><br />
+&nbsp;916 <br />
+&nbsp;917 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* close this locale and reinitialise <span class='if'>if</span> a new locale was <br />
+&nbsp;918 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   issued as an argument or in $MANOPT */<br />
+<script type='text/javascript'>
+$(document).ready(function() { toggleFold(6) })
+</script>
+<span class='fold_button fold_off fold_off_id_6' onclick='toggleFold(6)'>Unfold</span><span class='fold_button fold_on fold_on_id_6' onclick='toggleFold(6)'>Fold</span><span class='fold_text'>CSIA</span><br /><div class='fold' id='fold_6'>&nbsp;919 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (locale) {<br />
+&nbsp;920 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (internal_locale);<br />
+&nbsp;921 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;internal_locale = setlocale (LC_ALL, locale);<br />
+&nbsp;922 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (internal_locale)<br />
+&nbsp;923 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;internal_locale = xstrdup (internal_locale);<br />
+&nbsp;924 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
+&nbsp;925 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;internal_locale = xstrdup (locale);<br />
+&nbsp;926 <br />
+&nbsp;927 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"main(): locale = %s, internal_locale = %s\n"</span>,<br />
+&nbsp;928 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       locale, internal_locale);<br />
+&nbsp;929 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (internal_locale) {<br />
+&nbsp;930 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setenv (<span class='str_literal'>"LANGUAGE"</span>, internal_locale, 1);<br />
+&nbsp;931 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_changed ();<br />
+&nbsp;932 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;multiple_locale = NULL;<br />
+&nbsp;933 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;934 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</div>
+&nbsp;935 <br />
+&nbsp;936 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* sort out the internal manpath */<br />
+&nbsp;937 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (<span class='highlight'>manp</span> == NULL)<span class='highlight_text'>option -M set?</span><br />
+&nbsp;938 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manp = locale_manpath (<span class='highlight'>get_manpath</span> (alt_systems));<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
+&nbsp;939 <span class='else'>else</span><br />
+&nbsp;940 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (<span class='highlight'>get_manpath</span> (NULL));<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
+&nbsp;941 <br />
+&nbsp;942 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;create_pathlist (manp, manpathlist);<br />
+&nbsp;943 <br />
+&nbsp;944 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;display_seen = hashtable_create (&amp;null_hashtable_free);<br />
+&nbsp;945 <br />
+&nbsp;946 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;947 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_charset = xasprintf (<span class='str_literal'>"%s//IGNORE"</span>, get_locale_charset ());<br />
+&nbsp;948 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;conv_to_locale = iconv_open (locale_charset, <span class='str_literal'>"UTF-8"</span>);<br />
+&nbsp;949 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locale_charset);<br />
+&nbsp;950 <span class='endif'>#endif</span> /* HAVE_ICONV */<br />
+&nbsp;951 <br />
+&nbsp;952 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt) {<br />
+&nbsp;953 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;954 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;preg = XNMALLOC (num_keywords, regex_t);<br />
+&nbsp;955 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_keywords; ++i)<br />
+&nbsp;956 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;xregcomp (&amp;preg[i], keywords[i],<br />
+&nbsp;957 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  REG_EXTENDED | REG_NOSUB | REG_ICASE);<br />
+&nbsp;958 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;959 <br />
+&nbsp;960 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!search ((const <span class='char'>char</span> **) keywords, num_keywords))<br />
+&nbsp;961 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;status = NOT_FOUND;<br />
+&nbsp;962 <br />
+&nbsp;963 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (regex_opt) {<br />
+&nbsp;964 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
+&nbsp;965 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (i = 0; i &lt; num_keywords; ++i)<br />
+&nbsp;966 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;regfree (&amp;preg[i]);<br />
+&nbsp;967 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (preg);<br />
+&nbsp;968 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
+&nbsp;969 <br />
+&nbsp;970 <span class='ifdef'>#ifdef</span> HAVE_ICONV<br />
+&nbsp;971 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (conv_to_locale != (iconv_t) -1)<br />
+&nbsp;972 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;iconv_close (conv_to_locale);<br />
+&nbsp;973 <span class='endif'>#endif</span> /* HAVE_ICONV */<br />
+&nbsp;974 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hashtable_free (display_seen);<br />
+&nbsp;975 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free_pathlist (manpathlist);<br />
+&nbsp;976 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (manp);<br />
+&nbsp;977 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (internal_locale);<br />
+&nbsp;978 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (program_name);<br />
+&nbsp;979 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exit (status);<br />
+&nbsp;980 }<br />
+&nbsp;981 <br />
+</body>
+</html>

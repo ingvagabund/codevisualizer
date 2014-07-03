@@ -1,0 +1,5 @@
+Aim is to create a tool to visualize semantic parts of the code
+or comment the code without changing the source file itself.
+
+Improve your code by additional comments, code folding, function marking,
+highlighting important parts of code without changing the code itself.

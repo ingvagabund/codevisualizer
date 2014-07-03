@@ -1,0 +1,29 @@
+# <linenumber>:comment:text
+# <linenumber>:fold:<endlinenumber>:<folded 0|1>:text
+# <linenumber>:highlight:<keyword>:text
+
+
+#### reading config file ####
+827:needinfo:namestore:list of items of config file
+843:comment:~/.manpath
+846:comment:read config file only once
+850:fold:866:1:read config file from ~/.manpath or user file (user_config_file) through option
+851:comment:NULL if called from manpath
+862:highlight:add_to_dirlist (config, 1):parses config file and calls add functions
+868:needinfo:"MAN_TEST_DISABLE_SYSTEM_CONFIG":I guess just for testing purposes
+867:fold:885:1:read testing config file i guess
+887:comment:just print to debug
+#############################
+
+581:comment:systems and manpathlist-colon separated values => quadratic complexity for resulting manpath
+
+704:comment:just reading config file
+718:highlight:guess_manpath:KSIA
+729:highlight:guess_manpath:KSIA
+741:highlight:guess_manpath:KSIA
+757:highlight:guess_manpath:KSIA
+717:highlight:add_system_manpath:combine system paths with manpathlist in O(n^2)
+728:highlight:add_system_manpath:combine system paths with manpathlist in O(n^2)
+740:highlight:add_system_manpath:combine system paths with manpathlist in O(n^2)
+742:highlight:add_system_manpath:combine system paths with manpathlist in O(n^2)
+753:highlight:add_system_manpath:combine system paths with manpathlist in O(n^2)

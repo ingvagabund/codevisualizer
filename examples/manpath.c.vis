@@ -1,0 +1,15 @@
+# comments
+# <linenumber>:<command>:<value>
+# <linenumber>:comment:text
+# <linenumber>:fold:<endlinenumber>:<folded 0|1>:text
+# <linenumber>:highlight:<keyword>:text
+# <linenumber>:needinfo:<keyword>:text
+72:comment:Argument parsing
+73:fold:101:1:Argument parsing
+114:comment:Nothing interesting
+115:comment:Nothing interesting
+120:highlight:get_manpath (alt_system):get all possible manpaths (optionally appending alternative systems)
+123:highlight:get_mandb_manpath ():get all possible manpaths just from parsed config files
+131:highlight:cat_manpath (path_string):get all possible catpaths mapped on manpaths (from user config (prefered) file or man_db.conf)
+
+120:fold:131:0:if -g is specified, get_manpath and get_mandb_manpath (resp. cat_manpath) are executed even if only manpath for -g (resp. -c) is printf'ed

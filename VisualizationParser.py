@@ -42,9 +42,13 @@ class VisualizationParser(object):
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
                                         continue
 				self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
-
-			else:
-				self.lines[ int(items[0]) ] = {'command': items[1], 'value': "//" + items[2:][0]}
+			elif command == 'needinfo':
+				if len(items) < 3:
+					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
+                                        continue
+				self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
+			else:	
+				self.lines[ int(items[0]) ] = {'command': items[1], 'value': "// " + ":".join(items[2:])}
 
 	def getCommands(self):
 		return self.lines
