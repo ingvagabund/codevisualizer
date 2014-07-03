@@ -28,7 +28,7 @@ from VisualizationParser import VisualizationParser
 from HTMLVisualizer import HTMLVisualizer
 
 version = "0.0"
-debug_level = 0
+debug_level = 1
 
 src_file = sys.argv[1]
 
@@ -52,20 +52,28 @@ vis_file = "examples/" + os.path.basename(src_file) + ".vis"
 debug("Opening visualization file: %s " % vis_file)
 # does the vis file exist?
 if not os.path.exists(vis_file):
+	debug("file not found, creating empty file")
 	open(vis_file, 'a').close()
 
+debug("Opening html file for write: %s " % vis_file)
 html_file = "examples/" + os.path.basename(src_file) + ".html"
 # does the html file exist?
 if not os.path.exists(html_file):
+	debug("file not found, creating empty file")
 	open(html_file, 'a').close()
 
-
+debug("Parsing visualization file...")
 visParser = VisualizationParser(vis_file)
 vis_lines = visParser.getCommands()
+debug("Visualization file parsed")
 
+debug("Parsing source code file...")
 codeParser = CodeParser(src_file)
 code_lines = codeParser.getLines()
+debug("Source file parser")
 
+debug("Initializing html output...")
 htmlVis = HTMLVisualizer(code_lines, vis_lines)
+debug("Html output generated")
 htmlVis.printPage(html_file)
 

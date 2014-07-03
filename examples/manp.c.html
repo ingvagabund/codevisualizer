@@ -97,7 +97,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;&nbsp;84 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *next;<br />
 &nbsp;&nbsp;85 };<br />
 &nbsp;&nbsp;86 <br />
-&nbsp;&nbsp;87 <span class='static'>static</span> <span class='struct'>struct</span> list *namestore, *tailstore;<br />
+&nbsp;&nbsp;87 <span class='static'>static</span> <span class='struct'>struct</span> list *<span class='highlight'>namestore</span>, *tailstore;<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;&nbsp;88 <br />
 &nbsp;&nbsp;89 <span class='define'>#define</span> SECTION_USER&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-6<br />
 &nbsp;&nbsp;90 <span class='define'>#define</span> SECTION&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-5<br />
@@ -119,7 +119,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;106 <span class='static'>static</span> inline <span class='char'>char</span> *fsstnd (const <span class='char'>char</span> *path);<br />
 &nbsp;107 <span class='static'>static</span> <span class='char'>char</span> *def_path (int flag);<br />
 &nbsp;108 <span class='static'>static</span> <span class='void'>void</span> add_dir_to_list (char **lp, <span class='const'>const</span> <span class='char'>char</span> *dir);<br />
-&nbsp;109 <span class='static'>static</span> <span class='char'>char</span> **add_dir_to_path_list (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p);<br />
+&nbsp;109 <span class='static'>static</span> <span class='char'>char</span> **<span class='highlight'>add_dir_to_path_list</span> (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p);<span class='highlight_text'>mphead is constant in the function, otherwise KSIA</span><br />
 &nbsp;110 <br />
 &nbsp;111 <br />
 &nbsp;112 <span class='static'>static</span> <span class='void'>void</span> add_to_list (const <span class='char'>char</span> *key, <span class='const'>const</span> <span class='char'>char</span> *cont, <span class='int'>int</span> flag)<br />
@@ -132,15 +132,15 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;119 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (tailstore)<br />
 &nbsp;120 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tailstore-&gt;next = list;<br />
 &nbsp;121 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tailstore = list;<br />
-&nbsp;122 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!namestore)<br />
-&nbsp;123 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;namestore = list;<br />
+&nbsp;122 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (!<span class='highlight'>namestore</span>)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
+&nbsp;123 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>namestore</span> = list;<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;124 }<br />
 &nbsp;125 <br />
 &nbsp;126 <span class='static'>static</span> <span class='const'>const</span> <span class='char'>char</span> *get_from_list (const <span class='char'>char</span> *key, <span class='int'>int</span> flag)<br />
 &nbsp;127 {<br />
 &nbsp;128 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 &nbsp;129 <br />
-&nbsp;130 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;130 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;131 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (flag == list-&gt;flag &amp;&amp; STREQ (key, list-&gt;key))<br />
 &nbsp;132 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> list-&gt;cont;<br />
 &nbsp;133 <br />
@@ -151,7 +151,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;138 {<br />
 &nbsp;139 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 &nbsp;140 <br />
-&nbsp;141 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = prev ? prev-&gt;next : namestore; list; list = list-&gt;next)<br />
+&nbsp;141 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = prev ? prev-&gt;next : <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;142 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (flag == list-&gt;flag &amp;&amp; STREQ (key, list-&gt;key))<br />
 &nbsp;143 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> list;<br />
 &nbsp;144 <br />
@@ -188,7 +188,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;175 {<br />
 &nbsp;176 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 &nbsp;177 <br />
-&nbsp;178 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;178 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;179 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"`%s<span class='str_literal'>'\t`%s'</span>\t`%d'\n"</span>,<br />
 &nbsp;180 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;       list-&gt;key, list-&gt;cont, list-&gt;flag);<br />
 &nbsp;181 }<br />
@@ -213,7 +213,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;200 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> **sections, **sectionp;<br />
 &nbsp;201 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> flag;<br />
 &nbsp;202 <br />
-&nbsp;203 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next) {<br />
+&nbsp;203 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next) {<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;204 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == SECTION_USER)<br />
 &nbsp;205 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;length_user++;<br />
 &nbsp;206 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span> <span class='if'>if</span> (list-&gt;flag == SECTION)<br />
@@ -227,7 +227,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;214 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;flag = SECTION;<br />
 &nbsp;215 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;216 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sectionp = sections;<br />
-&nbsp;217 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;217 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;218 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == flag)<br />
 &nbsp;219 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*sectionp++ = list-&gt;key;<br />
 &nbsp;220 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*sectionp = NULL;<br />
@@ -518,13 +518,13 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;505 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
 &nbsp;506 }<br />
 &nbsp;507 <br />
-&nbsp;508 <span class='char'>char</span> *add_nls_manpaths (const <span class='char'>char</span> *manpathlist, <span class='const'>const</span> <span class='char'>char</span> *locales)<br />
+&nbsp;508 <span class='char'>char</span> *<span class='highlight'>add_nls_manpaths</span> (const <span class='char'>char</span> *manpathlist, <span class='const'>const</span> <span class='char'>char</span> *locales)<span class='highlight_text'>each path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)</span><br />
 &nbsp;509 {<br />
 &nbsp;510 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
 &nbsp;511 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *locales_copy, *tok, *locales_ptr;<br />
-&nbsp;512 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *locale_manpath;<br />
+&nbsp;512 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *<span class='highlight'>locale_manpath</span>;<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;513 <br />
-&nbsp;514 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"add_nls_manpaths(): processing %s\n"</span>, manpathlist);<br />
+&nbsp;514 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"<span class='highlight'>add_nls_manpaths</span>(): processing %s\n"</span>, manpathlist);<span class='highlight_text'>each path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)</span><br />
 &nbsp;515 <br />
 &nbsp;516 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locales == NULL || *locales == <span class='str_literal'>'\0'</span>)<br />
 &nbsp;517 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> xstrdup (manpathlist);<br />
@@ -553,7 +553,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;540 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * wrong.<br />
 &nbsp;541 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *<br />
 &nbsp;542 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * We go to no special effort to de-duplicate directories here.<br />
-&nbsp;543 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * create_pathlist will sort it out later; note that it preserves<br />
+&nbsp;543 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * <span class='highlight'>create_pathlist</span> will sort it out later; note that it preserves<span class='highlight_text'>remove duplicated and canonilize all paths (globing in subfunction)</span><br />
 &nbsp;544 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * order in that it keeps the first of any duplicate set in its<br />
 &nbsp;545 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; * original position.<br />
 &nbsp;546 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; */<br />
@@ -566,27 +566,27 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;553 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;continue;<br />
 &nbsp;554 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"checking <span class='for'>for</span> locale %s\n"</span>, tok);<br />
 &nbsp;555 <br />
-&nbsp;556 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_manpath = get_nls_manpath (manpathlist, tok);<br />
-&nbsp;557 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locale_manpath) {<br />
+&nbsp;556 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>locale_manpath</span> = get_nls_manpath (manpathlist, tok);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
+&nbsp;557 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (<span class='highlight'>locale_manpath</span>) {<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;558 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpath)<br />
 &nbsp;559 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = appendstr (manpath, <span class='str_literal'>":"</span>,<br />
-&nbsp;560 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     locale_manpath, NULL);<br />
+&nbsp;560 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     <span class='highlight'>locale_manpath</span>, NULL);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;561 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
-&nbsp;562 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (locale_manpath);<br />
-&nbsp;563 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locale_manpath);<br />
+&nbsp;562 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (<span class='highlight'>locale_manpath</span>);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
+&nbsp;563 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (<span class='highlight'>locale_manpath</span>);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;564 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;565 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;566 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locales_copy);<br />
 &nbsp;567 <br />
 &nbsp;568 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/* Always try untranslated pages as a last resort. */<br />
-&nbsp;569 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;locale_manpath = get_nls_manpath (manpathlist, <span class='str_literal'>"C"</span>);<br />
-&nbsp;570 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (locale_manpath) {<br />
+&nbsp;569 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>locale_manpath</span> = get_nls_manpath (manpathlist, <span class='str_literal'>"C"</span>);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
+&nbsp;570 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (<span class='highlight'>locale_manpath</span>) {<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;571 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (manpath)<br />
 &nbsp;572 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = appendstr (manpath, <span class='str_literal'>":"</span>,<br />
-&nbsp;573 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     locale_manpath, NULL);<br />
+&nbsp;573 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;     <span class='highlight'>locale_manpath</span>, NULL);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;574 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='else'>else</span><br />
-&nbsp;575 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (locale_manpath);<br />
-&nbsp;576 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (locale_manpath);<br />
+&nbsp;575 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = xstrdup (<span class='highlight'>locale_manpath</span>);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
+&nbsp;576 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (<span class='highlight'>locale_manpath</span>);<span class='highlight_text'>to each path in manpath prepend its localized paths</span><br />
 &nbsp;577 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;578 <br />
 &nbsp;579 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
@@ -702,14 +702,14 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;689 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;   def_path (MANDATORY));<br />
 &nbsp;690 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;691 <br />
-&nbsp;692 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = get_manpath_from_path (path, 1);<br />
+&nbsp;692 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpathlist = <span class='highlight'>get_manpath</span>_from_path (path, 1);<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
 &nbsp;693 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;694 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = add_system_manpath (systems, manpathlist);<br />
 &nbsp;695 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (manpathlist);<br />
 &nbsp;696 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> manpath;<br />
 &nbsp;697 }<br />
 &nbsp;698 <br />
-&nbsp;699 <span class='char'>char</span> *get_manpath (const <span class='char'>char</span> *systems)<br />
+&nbsp;699 <span class='char'>char</span> *<span class='highlight'>get_manpath</span> (const <span class='char'>char</span> *systems)<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
 &nbsp;700 {<br />
 &nbsp;701 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpathlist;<br />
 &nbsp;702 <br />
@@ -847,7 +847,7 @@ $(document).ready(function() { $('span.fold_off').hide(); })
 &nbsp;834 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (prev);<br />
 &nbsp;835 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 &nbsp;836 <br />
-&nbsp;837 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;namestore = tailstore = NULL;<br />
+&nbsp;837 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='highlight'>namestore</span> = tailstore = NULL;<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;838 }<br />
 &nbsp;839 <br />
 &nbsp;840 <span class='void'>void</span> read_config_file (int optional)<br />
@@ -918,7 +918,7 @@ $(document).ready(function() { toggleFold(2) })
 &nbsp;899 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
 &nbsp;900 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list; <br />
 &nbsp;901 <br />
-&nbsp;902 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+&nbsp;902 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 &nbsp;903 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == flag) {<br />
 &nbsp;904 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **expanded_dirs;<br />
 &nbsp;905 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> i;<br />
@@ -977,7 +977,7 @@ $(document).ready(function() { toggleFold(2) })
 &nbsp;958  * $HOME/man exists -- the directory $HOME/man will be added<br />
 &nbsp;959  * to the manpath.<br />
 &nbsp;960  */<br />
-&nbsp;961 <span class='char'>char</span> *get_manpath_from_path (const <span class='char'>char</span> *path, <span class='int'>int</span> mandatory)<br />
+&nbsp;961 <span class='char'>char</span> *<span class='highlight'>get_manpath</span>_from_path (const <span class='char'>char</span> *path, <span class='int'>int</span> mandatory)<span class='highlight_text'>get all possible man paths (optionally with systems)</span><br />
 &nbsp;962 {<br />
 &nbsp;963 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> len;<br />
 &nbsp;964 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *tmppath;<br />
@@ -1048,7 +1048,7 @@ $(document).ready(function() { toggleFold(2) })
 1029 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (mandatory) {<br />
 1030 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;debug (<span class='str_literal'>"\nadding mandatory man directories\n\n"</span>);<br />
 1031 <br />
-1032 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1032 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 1033 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDATORY) {<br />
 1034 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;insert_override_dir (tmplist, list-&gt;key);<br />
 1035 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_dir_to_list (tmplist, list-&gt;key);<br />
@@ -1176,7 +1176,7 @@ $(document).ready(function() { toggleFold(2) })
 1157 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> NULL;<br />
 1158 }<br />
 1159 <br />
-1160 <span class='static'>static</span> <span class='char'>char</span> **add_dir_to_path_list (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p)<br />
+1160 <span class='static'>static</span> <span class='char'>char</span> **<span class='highlight'>add_dir_to_path_list</span> (char **mphead, <span class='char'>char</span> **mp, <span class='const'>const</span> <span class='char'>char</span> *p)<span class='highlight_text'>mphead is constant in the function, otherwise KSIA</span><br />
 1161 {<br />
 1162 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='int'>int</span> status, i;<br />
 1163 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *cwd, *d, **expanded_dirs;<br />
@@ -1215,7 +1215,7 @@ $(document).ready(function() { toggleFold(2) })
 1196 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> mp;<br />
 1197 }<br />
 1198 <br />
-1199 <span class='void'>void</span> create_pathlist (const <span class='char'>char</span> *manp, <span class='char'>char</span> **mp)<br />
+1199 <span class='void'>void</span> <span class='highlight'>create_pathlist</span> (const <span class='char'>char</span> *manp, <span class='char'>char</span> **mp)<span class='highlight_text'>remove duplicated and canonilize all paths (globing in subfunction)</span><br />
 1200 {<br />
 1201 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='const'>const</span> <span class='char'>char</span> *p, *end;<br />
 1202 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> **mphead = mp;<br />
@@ -1226,10 +1226,10 @@ $(document).ready(function() { toggleFold(2) })
 1207 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;end = strchr (p, <span class='str_literal'>':'</span>);<br />
 1208 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (end) {<br />
 1209 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *element = xstrndup (p, end - p);<br />
-1210 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = add_dir_to_path_list (mphead, mp, element);<br />
+1210 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = <span class='highlight'>add_dir_to_path_list</span> (mphead, mp, element);<span class='highlight_text'>mphead is constant in the function, otherwise KSIA</span><br />
 1211 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;free (element);<br />
 1212 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} <span class='else'>else</span> {<br />
-1213 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = add_dir_to_path_list (mphead, mp, p);<br />
+1213 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mp = <span class='highlight'>add_dir_to_path_list</span> (mphead, mp, p);<span class='highlight_text'>mphead is constant in the function, otherwise KSIA</span><br />
 1214 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break;<br />
 1215 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
 1216 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
@@ -1303,7 +1303,7 @@ $(document).ready(function() { toggleFold(2) })
 1284 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='char'>char</span> *manpath = NULL;<br />
 1285 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 1286 <br />
-1287 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1287 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 1288 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDB_MAP || list-&gt;flag == MANDB_MAP_USER)<br />
 1289 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;manpath = pathappend (manpath, list-&gt;key);<br />
 1290 <br />
@@ -1323,11 +1323,11 @@ $(document).ready(function() { toggleFold(2) })
 1304  * whether to drop privileges. When cattype != 0 it's OK to <span class='return'>return</span> global<br />
 1305  * catpaths.<br />
 1306  */<br />
-1307 <span class='char'>char</span> *get_catpath (const <span class='char'>char</span> *name, <span class='int'>int</span> cattype)<br />
+1307 <span class='char'>char</span> *<span class='highlight'>get_catpath</span> (const <span class='char'>char</span> *name, <span class='int'>int</span> cattype)<span class='highlight_text'>search for mapping and translates manpagepath to its catpath (MANDB_MAP lines)</span><br />
 1308 {<br />
 1309 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 1310 <br />
-1311 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1311 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 1312 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (((cattype &amp; SYSTEM_CAT) &amp;&amp; list-&gt;flag == MANDB_MAP) ||<br />
 1313 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    ((cattype &amp; USER_CAT)   &amp;&amp; list-&gt;flag == MANDB_MAP_USER)) {<br />
 1314 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size_t manlen = strlen (list-&gt;key);<br />
@@ -1377,7 +1377,7 @@ $(document).ready(function() { toggleFold(2) })
 1358 {<br />
 1359 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='struct'>struct</span> list *list;<br />
 1360 <br />
-1361 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = namestore; list; list = list-&gt;next)<br />
+1361 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='for'>for</span> (list = <span class='highlight'>namestore</span>; list; list = list-&gt;next)<span class='highlight_text'>list of all relevant lines from config files  distinguished by flag</span><br />
 1362 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='if'>if</span> (list-&gt;flag == MANDB_MAP &amp;&amp;<br />
 1363 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    STRNEQ (dir, list-&gt;key, strlen (list-&gt;key)))<br />
 1364 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class='return'>return</span> 1;<br />

@@ -126,8 +126,6 @@ class HTMLVisualizer(object):
 					for keyword in self.keyworddb:
 						if keyword in line:
 							line = self.highlightKeyword(line, keyword, self.keyworddb[keyword])
-							print line
-
 
 				line = self.tokenize(line)
 

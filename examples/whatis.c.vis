@@ -9,8 +9,26 @@
 143:fold:163:1:from sections string get individual sections
 165:fold:239:1:options parsing
 
+826:fold:830:0:find a catpath for given manpath (If no catpath, use manpath. Missing mapping in man_db.conf)
+
+624:fold:627:0:wildcard search
+641:highlight:left:take a symbol to the left of the current found substring (not _ or lower)
+642:highlight:right:take a symbol to the right of the current found substring (not _ or lower)
+685:highlight:match:search for subword (surrounded by chars not equal to _ or islower set)
+
+######## do_apropos ########
+757:comment:sections set from -s option
+758:fold:771:1:Go through set sections. If item from db not in sections, take next item.
+778:fold:790:0:Find those man pages with match to given keyword (if apropos, search a whatis text as well). Search can depend on wildcards xor regexp (wildcard is stronger than regexp).
+792:needinfo:display:Important call, inspect that!!! (should be a simple function)
+############################
+
+######## main ########
 879:fold:897:1:detecting apropos or whatis, hidding exact and and option
 899:fold:913:1:initialization, arg parsing
 915:highlight:read_config_file:KSIA
 919:fold:934:1:CSIA
 937:highlight:manp:option -M set?
+956:highlight:keywords:man page names
+960:highlight:search:the most important, the core itself after all preinit and manpath preparation
+######################

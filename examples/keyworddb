@@ -1,1 +1,10 @@
 get_manpath:get all possible man paths (optionally with systems)
+add_nls_manpaths:each path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)
+locale_manpath:to each path in manpath prepend its localized paths
+add_dir_to_path_list:mphead is constant in the function, otherwise KSIA
+create_pathlist:remove duplicated and canonilize all paths (globing in subfunction)
+get_catpath:search for mapping and translates manpagepath to its catpath (MANDB_MAP lines)
+namestore:list of all relevant lines from config files  distinguished by flag
+split_content:transform content from (key/content) pair from db into struct mandata
+parse_name:find a match in a man page name (result in found var)
+parse_whatis:find a match in a whatis text of man page (name - whatis text) (result in found var)
