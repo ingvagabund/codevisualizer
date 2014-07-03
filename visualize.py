@@ -12,18 +12,26 @@
 # TODO:
 #	[  ] - add keywords coloring
 #	[  ] - add block folding
-#
-#
+#	[  ] - add multilevel block folding
+#	[  ] - add autofold from *.vis file
 
 import sys
 import os
+from CodeParser import CodeParser
+from VisualizationParser import VisualizationParser
+from HTMLVisualizer import HTMLVisualizer
 
 version = "0.0"
+debug_level = 0
 
 src_file = sys.argv[1]
 
-print "Code Visualizer, version %s" % version
-print "Opening file: %s" % src_file
+def debug(msg):
+	if debug_level > 0:
+		print msg
+
+debug("Code Visualizer, version %s" % version)
+debug("Opening file: %s" % src_file)
 
 # read source code
 src_content = ""
@@ -35,67 +43,18 @@ with open(src_file, "r") as file:
 vis_file = os.path.basename(src_file) + ".vis"
 
 # read visualization file
-print "Opening visualization file: %s " % vis_file
+debug("Opening visualization file: %s " % vis_file)
 #vis_content = ""
 #with open(vis_file, "r") as file:
 #	vis_content = file.read()
 
-class VisualizationParser(object):
-
-	def __init__(self, file):
-		self.file = file
-		self.parse()
-
-	def parse(self):
-		vis_content = ""
-		with open(self.file, "r") as file:
-        		vis_content = file.read()
-
-		self.lines = {}
-		line_counter = 0
-		for line in vis_content.split("\n"):
-			line_counter = line_counter + 1
-			#skip empty lines
-			if len(line) == 0:
-				continue
-
-			#skip comments
-			if line[0] == "#":
-				continue
-
-			#<linenumber>:<command>:<value>
-			items = line.split(":")
-			if len(items) < 3:
-				sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
-				continue
-
-			self.lines[ int(items[0]) ] = {'command': items[1], 'value': items[2:]}
-
-	def getCommands(self):
-		return self.lines
-
-class CodeParser(object):
-
-	def __init__(self, file):
-		self.file = file
-		self.parse()
-
-	def parse(self):
-		content = ""
-		with open(self.file, "r") as file:
-			content = file.read()
-
-		# each line is counted
-		line_counter = 0
-		for line in content.split("\n"):
-			line_counter = line_counter + 1
-			print "%d: %s" % (line_counter, line)
-
-codeParser = CodeParser(src_file)
 
 visParser = VisualizationParser(vis_file)
-#print visParser.getCommands()
+vis_lines = visParser.getCommands()
 
-print ""
-#print vis_content
+codeParser = CodeParser(src_file)
+code_lines = codeParser.getLines()
+
+htmlVis = HTMLVisualizer(code_lines, vis_lines)
+htmlVis.printPage()
 
