@@ -108,17 +108,17 @@ class HTMLVisualizer(object):
 					if command['command'] == 'comment':
 						if len(line) > 0:
 							line = line + 3*"&nbsp;"
-						line = line + "<span class='comment'>%s</span>" % (command['value'])
+						line = line + "<span class='comment'>%s</span>" % (self.pretokenize(command['value']))
 					elif command['command'] == 'fold':
 						fold = True
 						fold_start = index + 1
 						fold_end = command['endline']
-						fold_text = command['value']
+						fold_text = self.pretokenize(command['value'])
 						folded = command['folded']
 					elif command['command'] == 'highlight':
-						line = self.highlightKeyword(line, command['keyword'], command['value'])
+						line = self.highlightKeyword(line, command['keyword'], self.pretokenize(command['value']))
 					elif command['command'] == 'needinfo':
-	                                        line = self.needinfoKeyword(line, command['keyword'], command['value'])
+	                                        line = self.needinfoKeyword(line, command['keyword'], self.pretokenize(command['value']))
 				else:
 					line = self.colorLiterals(line)
 					line = self.colorKeywords(line)
