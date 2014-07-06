@@ -40,9 +40,11 @@ span.double,
 span.float,
 span.signed,
 span.unsigned,
+span.void,
 span.char,
 span.const,
-span.return
+span.return,
+span.typedef
 {color: blue;}
 
 span.include,

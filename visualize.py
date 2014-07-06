@@ -20,6 +20,8 @@
 #	[  ] - support for multiline comments on a single line (flowing div)
 #	[  ] - make a call graph for every module (use existing tools)
 #	[  ] - ignore comments (+color them)
+#	[  ] - find a suitable dir for keyword file
+#	[  ] - install css and js files into dest directory
 
 import sys
 import os
@@ -116,8 +118,13 @@ codeParser = CodeParser(src_file)
 code_lines = codeParser.getLines()
 debug("Source file parser")
 
-debug("Initializing html output...")
-htmlVis = HTMLVisualizer(code_lines, vis_lines)
-debug("Html output generated")
-htmlVis.printPage(html_file)
+dir_parts = os.path.realpath(__file__).split("/")
+del(dir_parts[-1])
+script_home = "/".join(dir_parts) 
+keywords_file = script_home + "/keywords"
 
+debug("Initializing html output...")
+htmlVis = HTMLVisualizer(code_lines, vis_lines, keywords_file, script_home)
+debug("Html output generated")
+htmlVis.printPage(html_file, destination)
+debug("Saved to: %s" % html_file)

@@ -1,15 +1,29 @@
 import re
+import os
+import shutil
 
 class HTMLVisualizer(object):
 
-	def __init__(self, src_lines, vis_lines):
+	def __init__(self, src_lines, vis_lines, keywords_file, script_dir):
 		self.src_lines = src_lines
 		self.vis_lines = vis_lines
+		self.keywords_file = keywords_file
+		self.layout_dir = "%s/layout" % script_dir
 		self.keywords = self.getKeywords()
+
+	def copyLayout(self, layout_dir, destination):
+		# copy css
+		#shutil.copyfile("%s/vis.css" % layout_dir, "%s/vis.css" % destination)
+		#shutil.copyfile("%s/vis.js" % layout_dir, "%s/js.css" % destination)
+		#shutil.copyfile("%s/jquery-1.9.1.js" % layout_dir, "%s/jquery-1.9.1.js" % destination)	
+		if os.path.exists("%s/layout" % destination):
+			shutil.rmtree("%s/layout" % destination)
+
+		shutil.copytree(layout_dir, "%s/layout" % destination)
 
 	def getKeywords(self):
 		content = ""
-		with open('keywords', 'r') as file:
+		with open(self.keywords_file, 'r') as file:
 			content = file.read()
 
 		keywords = {}
@@ -26,10 +40,16 @@ class HTMLVisualizer(object):
 
 		return keywords
 
-	def parseKeywordDB(self):
+	def parseKeywordDB(self, destination):
 		content = ""
 		self.keyworddb = {}
-		with open('examples/keyworddb', 'r') as file:
+
+		# keyworddb exists?
+		if not os.path.exists('%s/keyworddb' % destination):
+			open('%s/keyworddb' % destination, 'a').close()
+			return
+
+		with open('%s/keyworddb' % destination, 'r') as file:
                         content = file.read()
 
 		for line in content.split("\n"):
@@ -74,21 +94,22 @@ class HTMLVisualizer(object):
 		line = line.replace(keyword, "<span class='needinfo'>%s</span>" % keyword)
 		return line + "<span class='needinfo_text'><b>NEEDINFO:</b> %s</span>" % value
 
-	def printPage(self, file):
+	def printPage(self, file, destination):
 		with open(file, 'w') as file:
 			file.write("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n")
 			file.write("<html>\n")
 			file.write("<head>\n")
-			file.write("<link rel=\"stylesheet\" type=\"text/css\" href=\"../layout/vis.css\" />\n")
-			file.write("<script type=\"text/javascript\" src=\"../layout/jquery-1.9.1.js\"></script>\n")
-			file.write("<script type=\"text/javascript\" src=\"../layout/vis.js\"></script>\n")
+			file.write("<link rel=\"stylesheet\" type=\"text/css\" href=\"layout/vis.css\" />\n")
+			file.write("<script type=\"text/javascript\" src=\"layout/jquery-1.9.1.js\"></script>\n")
+			file.write("<script type=\"text/javascript\" src=\"layout/vis.js\"></script>\n")
 			file.write("<script type=\"text/javascript\">\n<!--\n")
 			file.write("$(document).ready(function() { $('span.fold_off').hide(); })\n")
 			file.write("// -->\n</script>\n")
 			file.write("</head>\n")
 			file.write("<body>\n")
 
-			self.parseKeywordDB()
+			self.copyLayout(self.layout_dir, destination)
+			self.parseKeywordDB(destination)
 
 			count = len(self.src_lines)
 			fold_id = 1
