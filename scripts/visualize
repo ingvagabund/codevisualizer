@@ -1,0 +1,3 @@
+#!/bin/sh
+
+/home/jchaloup/Projects/CodeVisualizer/visualize.py $@

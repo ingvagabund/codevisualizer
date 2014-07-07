@@ -90,8 +90,12 @@ class HTMLVisualizer(object):
 		line = line.replace(keyword, "<span class='highlight'>%s</span>" % keyword)
 		return line + "<span class='highlight_text'>%s</span>" % value
 
-	def needinfoKeyword(self, line, keyword, value):
-		line = line.replace(keyword, "<span class='needinfo'>%s</span>" % keyword)
+	def needinfoKeyword(self, line, keyword, value, attrs):
+		lkeyword = keyword
+		if 'link' in attrs:
+			lkeyword = "<a href='#%s'>%s</a>" % (attrs['link'], keyword)
+
+		line = line.replace(keyword, "<span class='needinfo'>%s</span>" % lkeyword)
 		return line + "<span class='needinfo_text'><b>NEEDINFO:</b> %s</span>" % value
 
 	def printPage(self, file, destination):
@@ -120,7 +124,7 @@ class HTMLVisualizer(object):
 			folded = 0
 	                for index in range(0, count):
 				ln = "%4s" % (index + 1)
-				ln = ln.replace(' ', "&nbsp;")
+				ln = "<a name='%s'>%s</a>" % (index + 1, ln.replace(' ', "&nbsp;"))
 				line = self.src_lines[index]
 				line = self.pretokenize(line)
 
@@ -139,7 +143,7 @@ class HTMLVisualizer(object):
 					elif command['command'] == 'highlight':
 						line = self.highlightKeyword(line, command['keyword'], self.pretokenize(command['value']))
 					elif command['command'] == 'needinfo':
-	                                        line = self.needinfoKeyword(line, command['keyword'], self.pretokenize(command['value']))
+	                                        line = self.needinfoKeyword(line, command['keyword'], self.pretokenize(command['value']), command['attrs'])
 				else:
 					line = self.colorLiterals(line)
 					line = self.colorKeywords(line)

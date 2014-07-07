@@ -20,8 +20,19 @@
 #	[  ] - support for multiline comments on a single line (flowing div)
 #	[  ] - make a call graph for every module (use existing tools)
 #	[  ] - ignore comments (+color them)
-#	[  ] - find a suitable dir for keyword file
-#	[  ] - install css and js files into dest directory
+#	[OK] - find a suitable dir for keyword file
+#	[OK] - install css and js files into dest directory
+#	[  ] - highlight (silver?) all functions body
+#	[  ] - make a configuration file (language, colors, function highlighting, conflicts, ...)
+#	[  ] - add links for keywords (to its function definition for example or a line, ...)
+#	[  ] - maybe run keyworddb and keyword as a daemon?
+#	[  ] - concept of hotspots (label prelogue, epilogue, important entry points to other functions) => call/guide graph of control flow
+#	[  ] - mark which function parametres or in/out/both (only some and defined by user or from comments?)
+#	[  ] - add support for views (view for db, for configuration, for display, concept explanation, ...)
+#	[  ] - when keyword specified, it is overwritten by keyword from db, both should be presented
+#	[  ] - have a default view (first time walkthrough?), additional views rewrittes default one?
+#	[  ] - what about "*dblookup " keyword? asterix *!!! more like new keyword search algorithm or "*dblookup(", "*dblookup["
+#	[  ] - add man pages whatis text to each keyword (or as a hidden bubble/text) - as a option to visualize (from 3 and 3p? only)
 
 import sys
 import os

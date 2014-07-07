@@ -42,11 +42,25 @@ class VisualizationParser(object):
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
                                         continue
 				self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
-			elif command == 'needinfo':
+			elif command.startswith('needinfo', 0, 8):
 				if len(items) < 3:
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
                                         continue
-				self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
+				# does the command contains attribues?
+				attrs = command.split('[')
+
+				attrs_db = {}
+				# comma separated values
+				if len(attrs) > 1:
+					attrs = attrs[1][0:-1].split(",")
+					for attr in attrs:
+						pair = attr.split("=")
+						if len(pair) != 2:
+							continue
+
+						attrs_db[ pair[0] ] = pair[1]
+
+				self.lines[ int(items[0]) ] = {'command': 'needinfo', 'keyword': items[2], 'value': items[3:][0], 'attrs': attrs_db }
 			else:	
 				self.lines[ int(items[0]) ] = {'command': items[1], 'value': "// " + ":".join(items[2:])}
 
