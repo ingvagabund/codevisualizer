@@ -33,6 +33,12 @@
 #	[  ] - have a default view (first time walkthrough?), additional views rewrittes default one?
 #	[  ] - what about "*dblookup " keyword? asterix *!!! more like new keyword search algorithm or "*dblookup(", "*dblookup["
 #	[  ] - add man pages whatis text to each keyword (or as a hidden bubble/text) - as a option to visualize (from 3 and 3p? only)
+#	[  ] - if I move over { sign, highlight the entire {'s block
+#	[  ] - specify for each fold its input and output vars (optionally of course)
+#	[  ] - add a command to specify global variables used in functions (to know what is needed and what can be changed => side effects)
+#	[  ] - do not mark keywords in literals or comments
+#	[  ] - add mustnotmiss command for very important invocations, ... The entire line must flash or be unoverlookable!!!
+#	[  ] - add something like "the last unfinished source code page" to continue when finished the last time
 
 import sys
 import os
