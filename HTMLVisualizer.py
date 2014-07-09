@@ -40,17 +40,17 @@ class HTMLVisualizer(object):
 
 		return keywords
 
-	def parseKeywordDB(self, destination):
+	def parseKeywordDB(self, file):
 		content = ""
-		self.keyworddb = {}
+		keyworddb = {}
 
 		# keyworddb exists?
-		if not os.path.exists('%s/keyworddb' % destination):
-			open('%s/keyworddb' % destination, 'a').close()
-			return
+		if not os.path.exists(file):
+			open(file, 'a').close()
+			return {}
 
-		with open('%s/keyworddb' % destination, 'r') as file:
-                        content = file.read()
+		with open(file, 'r') as fd:
+                        content = fd.read()
 
 		for line in content.split("\n"):
 			if len(line) == 0:
@@ -63,7 +63,9 @@ class HTMLVisualizer(object):
 			if len(items) < 2:
 				continue
 
-			self.keyworddb[items[0]] = ":".join(items[1:])
+			keyworddb[items[0]] = ":".join(items[1:])
+
+		return keyworddb
 
 	def pretokenize(self, line):
 		line = line.replace('&', "&amp;")
@@ -99,21 +101,27 @@ class HTMLVisualizer(object):
 		return line + "<span class='needinfo_text'><b>NEEDINFO:</b> %s</span>" % value
 
 	def printPage(self, file, destination):
-		with open(file, 'w') as file:
-			file.write("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n")
-			file.write("<html>\n")
-			file.write("<head>\n")
-			file.write("<link rel=\"stylesheet\" type=\"text/css\" href=\"layout/vis.css\" />\n")
-			file.write("<script type=\"text/javascript\" src=\"layout/jquery-1.9.1.js\"></script>\n")
-			file.write("<script type=\"text/javascript\" src=\"layout/vis.js\"></script>\n")
-			file.write("<script type=\"text/javascript\">\n<!--\n")
-			file.write("$(document).ready(function() { $('span.fold_off').hide(); })\n")
-			file.write("// -->\n</script>\n")
-			file.write("</head>\n")
-			file.write("<body>\n")
+
+		with open("%s/%s.html" % (destination, file), 'w') as fd:
+			fd.write("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n")
+			fd.write("<html>\n")
+			fd.write("<head>\n")
+			fd.write("<link rel=\"stylesheet\" type=\"text/css\" href=\"layout/vis.css\" />\n")
+			fd.write("<script type=\"text/javascript\" src=\"layout/jquery-1.9.1.js\"></script>\n")
+			fd.write("<script type=\"text/javascript\" src=\"layout/vis.js\"></script>\n")
+			fd.write("<script type=\"text/javascript\">\n<!--\n")
+			fd.write("$(document).ready(function() { $('span.fold_off').hide(); })\n")
+			fd.write("// -->\n</script>\n")
+			fd.write("</head>\n")
+			fd.write("<body>\n")
 
 			self.copyLayout(self.layout_dir, destination)
-			self.parseKeywordDB(destination)
+			self.keyworddb = self.parseKeywordDB("%s/keyworddb" % destination)
+			filekeyworddb = self.parseKeywordDB("%s/%s.keyworddb" % (destination, file))
+
+			# source code file specific keywords has higher priority (later maybe display both)
+			for key in filekeyworddb:
+				self.keyworddb[key] = filekeyworddb[key]
 
 			count = len(self.src_lines)
 			fold_id = 1
@@ -163,9 +171,9 @@ class HTMLVisualizer(object):
 					prefix = prefix + "<div class='fold' id='fold_%d'>" % fold_id
 
 					if folded:
-						file.write("<script type='text/javascript'>\n")
-						file.write("$(document).ready(function() { toggleFold(%d) })\n" % fold_id)
-						file.write("</script>\n")
+						fd.write("<script type='text/javascript'>\n")
+						fd.write("$(document).ready(function() { toggleFold(%d) })\n" % fold_id)
+						fd.write("</script>\n")
 
 					fold_id = fold_id + 1
 
@@ -173,7 +181,7 @@ class HTMLVisualizer(object):
 					sufix = "</div>"
 					fold = False
 
-	                        file.write("%s%s %s%s\n" % (prefix, ln, line, sufix))
+	                        fd.write("%s%s %s%s\n" % (prefix, ln, line, sufix))
 
-			file.write("</body>\n")
-			file.write("</html>\n")
+			fd.write("</body>\n")
+			fd.write("</html>\n")

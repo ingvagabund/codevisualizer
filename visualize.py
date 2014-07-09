@@ -39,6 +39,8 @@
 #	[  ] - do not mark keywords in literals or comments
 #	[  ] - add mustnotmiss command for very important invocations, ... The entire line must flash or be unoverlookable!!!
 #	[  ] - add something like "the last unfinished source code page" to continue when finished the last time
+#	[  ] - if possible link to main function in the file (maybe some content at the begging of the page or floating div
+#	[  ] - automatic code indenting (commands after { has +1 \t character, ...)
 
 import sys
 import os
@@ -109,7 +111,8 @@ if not os.path.exists(destination):
 	mkdir_p(destination)
 
 # extract basename
-vis_file = destination + "/" + os.path.basename(src_file) + ".vis"
+basename = os.path.basename(src_file)
+vis_file = destination + "/" + basename + ".vis"
 
 # read visualization file
 debug("Opening visualization file: %s " % vis_file)
@@ -119,7 +122,7 @@ if not os.path.exists(vis_file):
 	open(vis_file, 'a').close()
 
 debug("Opening html file for write: %s " % vis_file)
-html_file = destination + "/" + os.path.basename(src_file) + ".html"
+html_file = destination + "/" + basename + ".html"
 # does the html file exist?
 if not os.path.exists(html_file):
 	debug("file not found, creating empty file")
@@ -143,5 +146,5 @@ keywords_file = script_home + "/keywords"
 debug("Initializing html output...")
 htmlVis = HTMLVisualizer(code_lines, vis_lines, keywords_file, script_home)
 debug("Html output generated")
-htmlVis.printPage(html_file, destination)
+htmlVis.printPage(basename, destination)
 debug("Saved to: %s" % html_file)

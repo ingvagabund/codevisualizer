@@ -36,7 +36,7 @@ class VisualizationParser(object):
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
 	                                continue
 
-				self.lines[ int(items[0]) ] = {'command': items[1], 'endline': int(items[2]), 'folded': int(items[3]), 'value': items[4:][0]}
+				self.lines[ int(items[0]) ] = {'command': items[1], 'endline': int(items[2]), 'folded': int(items[3]), 'value': ":".join(items[4:])}
 			elif command == 'highlight':
 				if len(items) < 3:
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
