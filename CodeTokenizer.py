@@ -8,18 +8,81 @@ tokens = [
 "MACRO",
 "WHITESPACE",
 "COMMENT",
+"MCOMMENT",
 "INCLUDE",
 "NUMBER",
 #"LITERAL",
 "LPARENTHESIS",
 "RPARENTHESIS",
+"LBRACKET",
+"RBRACKET",
+"LBRACE",
+"RBRACE",
 "SEMICOLON",
 "COMMA",
-"ASTERISK"
+"ASTERISK",
+"EQUAL",
+"ASSIGN",
+"DIVIDE",
+"NOT",
+"MINUSLESS",
+"STRING",
+"CHARACTER",
+"LESS",
+"LEQ",
+"GREATER",
+"GEQ",
+"NEQ",
+"OR",
+"AND",
+"PLUS",
+"MINUS",
+"QUESTION",
+"COLON",
+"BAND",
+"BOR",
+"BACKSLASH",
+"DOT"
 ]
 
+t_BACKSLASH = (r"[\\]")
+
+t_STRING = (r"\".*?\"")
+t_CHARACTER = (r"'.*?'")
+
+t_MINUSLESS = ("->")
+t_QUESTION = (r"\?")
+t_COLON = (":")
+t_DOT = (".")
+
+# unary operators
+
+# binary operators
+t_DIVIDE = ("/")
+t_MINUS = ("-")
+t_PLUS = (r"\+")
+
+# bit operatos
+t_BOR = (r"\|")
+t_BAND = ("&")
+
+# logical operatos
+t_AND = ("&&")
+t_OR = ("\|\|")
+t_NOT = ("!")
+
+# relational operators
+t_GEQ = (">=")
+t_LEQ = ("<=")
+t_GREATER = (">")
+t_LESS = ("<")
+t_EQUAL = ("==")
+
+# assigment
+t_ASSIGN = ("=")
+
 #C identifier
-t_IDENTIFIER = (r"[a-zA-Z_]\w+")
+t_IDENTIFIER = (r"[a-zA-Z_]\w*")
 #C macro
 t_MACRO = (r"\#[a-zA-Z_]\w+")
 
@@ -28,7 +91,10 @@ t_WHITESPACE = (r"\s+")
 
 # one line and multi-line comment
 t_COMMENT = (
-	r"//[^\n]*|"
+	r"//[^\n]*"
+)
+
+t_MCOMMENT = (
 	r"/\*(\n|.)*?\*/"
 )
 
@@ -47,24 +113,52 @@ t_NUMBER = (r"(\+|-)?\d+(\.\d+)?(e|E((\+|-)?\d+))?")
 t_LPARENTHESIS = (r"\(")
 t_RPARENTHESIS = (r"\)")
 
+# left, right bracket
+t_LBRACKET = (r"\[")
+t_RBRACKET = (r"\]")
+
+# left, right brace
+t_LBRACE = (r"\{")
+t_RBRACE = (r"\}")
+
 # semicolon, comma, asterisk
 t_SEMICOLON = (r";")
 t_COMMA = (r",")
 t_ASTERISK = (r"\*")
 
 def t_error(t):
-	raise TypeError("Unknown text '%s'" % (t.value,))
+	raise TypeError("Unknown text '%s'" % (t.value[0:20],))
 
-lex.lex()
+################################################
+def getCodeKeywordsOccurences(file):
+	lex.lex()
 
-with open(sys.argv[1], "r") as fd:
-	#lex.input("hokus pokus\nnew line//one line comment\nnext line/* multi\nli**ne\co*m*m/ent*/")
-	content = fd.read()
-	#content = "/***//* */"
-	#print content.replace('\n', "\\n")
-	#content = "/*\n * This file is part of Taylor/core.\n\n    Taylor/core is free software: you can redistribute it and/or modify\n    it under the terms of the GNU General Public License as published by\n    the Free Software Foundation, either version 3 of the License, or\n    (at your option) any later version.\n\n    OpenGalaxySim is distributed in the hope that it will be useful,\n    but WITHOUT ANY WARRANTY; without even the implied warranty of\n    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n    GNU General Public License for more details.\n\n    You should have received a copy of the GNU General Public License\n    along with OpenGalaxySim.  If not, see <http://www.gnu.org/licenses/>.\n * \n * File:   error.h\n * Author: Vasek Vopenka\n *\n * Created on September 12, 2011, 11:57 AM\n */"
-	lex.input(content)
-	#lex.input("")
+	with open(file, "r") as fd:
+		content = fd.read()
+		lex.input(content)
 
-for tok in iter(lex.token, None):
-    print repr(tok.type), repr(tok.value)
+	keywords = {}
+	line_number = 1
+	for tok in iter(lex.token, None):
+		#print repr(tok.type), repr(tok.value), line_number
+
+		if tok.type == 'COMMENT':
+			line_number = line_number + 1
+		elif tok.type == 'WHITESPACE' or tok.type == 'MCOMMENT':
+			line_number = line_number + tok.value.count('\n')
+		else:
+			# save only identifiers
+			if tok.type == 'IDENTIFIER':
+				# filter out all language keywords
+
+				# save into db keyword and its line number
+				if repr(tok.value) not in keywords:
+					keywords[repr(tok.value)] = [line_number]
+				if line_number not in keywords[repr(tok.value)]:
+					keywords[repr(tok.value)].append(line_number)
+
+	for key in keywords:
+		print "%s (%s)" % (key, str(keywords[key]))
+
+if __name__ == "__main__":
+	getCodeKeywordsOccurences(sys.argv[1])
