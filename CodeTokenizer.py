@@ -130,6 +130,7 @@ def t_error(t):
 	raise TypeError("Unknown text '%s'" % (t.value[0:20],))
 
 ################################################
+source_code_keywords = {}
 def getCodeKeywordsOccurences(file):
 	lex.lex()
 
@@ -137,28 +138,45 @@ def getCodeKeywordsOccurences(file):
 		content = fd.read()
 		lex.input(content)
 
-	keywords = {}
 	line_number = 1
+	column_number = 1
 	for tok in iter(lex.token, None):
-		#print repr(tok.type), repr(tok.value), line_number
+		#print tok
+		#print repr(tok.type), repr(tok.value), line_number, column_number
 
 		if tok.type == 'COMMENT':
 			line_number = line_number + 1
+			column_number = 1
 		elif tok.type == 'WHITESPACE' or tok.type == 'MCOMMENT':
 			line_number = line_number + tok.value.count('\n')
+			# find the last \n character
+			lnl = tok.value.rfind('\n')
+			ll = len(tok.value)
+			if ll == (lnl + 1):
+				column_number = 1
+			else:
+				if lnl != -1:
+					column_number = column_number + ll - (lnl + 1)
+				else:
+					column_number = column_number + ll
 		else:
 			# save only identifiers
 			if tok.type == 'IDENTIFIER':
 				# filter out all language keywords
 
 				# save into db keyword and its line number
-				if repr(tok.value) not in keywords:
-					keywords[repr(tok.value)] = [line_number]
-				if line_number not in keywords[repr(tok.value)]:
-					keywords[repr(tok.value)].append(line_number)
+				if repr(tok.value) not in source_code_keywords:
+					source_code_keywords[repr(tok.value)] = {line_number: [column_number]}
+				if line_number not in source_code_keywords[repr(tok.value)]:
+					source_code_keywords[repr(tok.value)][line_number] = [column_number]
+				elif column_number not in source_code_keywords[repr(tok.value)][line_number]:
+					source_code_keywords[repr(tok.value)][line_number].append(column_number)
+					
+			column_number = column_number + len(tok.value)
 
-	for key in keywords:
-		print "%s (%s)" % (key, str(keywords[key]))
+	#for key in source_code_keywords:
+	#	print "%s (%s)" % (key, str(source_code_keywords[key]))
+	return source_code_keywords
 
 if __name__ == "__main__":
-	getCodeKeywordsOccurences(sys.argv[1])
+	print getCodeKeywordsOccurences(sys.argv[1])
