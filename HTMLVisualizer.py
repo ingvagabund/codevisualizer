@@ -266,12 +266,17 @@ class HTMLVisualizer(object):
 									self.add2lnSubs(len(oline)+1, len(comment), comment)
 						
 				for keyword in self.keyworddb:
-					if keyword in line:
-						clm = self.src_keywords[ keyword ][ index + 1 ]
-						for clm_item in clm:
-							self.add2lnSubs(clm_item, len(keyword), self.highlightBox(keyword))
-							comment = self.highlightLabel( self.pretokenize( self.keyworddb[keyword]) )
-							self.add2lnSubs(len(oline)+1, len(comment), comment)
+					if keyword not in self.src_keywords:
+						continue
+
+					if (index + 1) not in self.src_keywords[ keyword ]:
+						continue
+
+					clm = self.src_keywords[ keyword ][ index + 1 ]
+					for clm_item in clm:
+						self.add2lnSubs(clm_item, len(keyword), self.highlightBox(keyword))
+						comment = self.highlightLabel( self.pretokenize( self.keyworddb[keyword]) )
+						self.add2lnSubs(len(oline)+1, len(comment), comment)
 							
 
 				out_line = []
