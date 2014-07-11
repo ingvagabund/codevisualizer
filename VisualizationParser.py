@@ -4,14 +4,20 @@ class VisualizationParser(object):
 
 	def __init__(self, file):
 		self.file = file
+		self.lines = {}
 		self.parse()
+
+	def addCommand(self, line_number, command):
+		if line_number not in self.lines:
+			self.lines[line_number] = [command]
+		else:
+			self.lines[line_number].append(command)
 
 	def parse(self):
 		vis_content = ""
 		with open(self.file, "r") as file:
         		vis_content = file.read()
 
-		self.lines = {}
 		line_counter = 0
 		for line in vis_content.split("\n"):
 			line_counter = line_counter + 1
@@ -36,12 +42,15 @@ class VisualizationParser(object):
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
 	                                continue
 
-				self.lines[ int(items[0]) ] = {'command': items[1], 'endline': int(items[2]), 'folded': int(items[3]), 'value': ":".join(items[4:])}
+				self.addCommand(int(items[0]), {'command': items[1], 'endline': int(items[2]), 'folded': int(items[3]), 'value': ":".join(items[4:])})
+				#self.lines[ int(items[0]) ] = {'command': items[1], 'endline': int(items[2]), 'folded': int(items[3]), 'value': ":".join(items[4:])}
 			elif command == 'highlight':
 				if len(items) < 3:
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
                                         continue
-				self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
+
+				self.addCommand(int(items[0]), {'command': items[1], 'keyword': items[2], 'value': items[3:][0]})
+				#self.lines[ int(items[0]) ] = {'command': items[1], 'keyword': items[2], 'value': items[3:][0]}
 			elif command.startswith('needinfo', 0, 8):
 				if len(items) < 3:
 					sys.stderr.write("line %s: '%s' not recognized, wrong format" % (line_counter, line))
@@ -60,9 +69,11 @@ class VisualizationParser(object):
 
 						attrs_db[ pair[0] ] = pair[1]
 
-				self.lines[ int(items[0]) ] = {'command': 'needinfo', 'keyword': items[2], 'value': items[3:][0], 'attrs': attrs_db }
+				self.addCommand( int(items[0]), {'command': 'needinfo', 'keyword': items[2], 'value': items[3:][0], 'attrs': attrs_db } )
+				#self.lines[ int(items[0]) ] = {'command': 'needinfo', 'keyword': items[2], 'value': items[3:][0], 'attrs': attrs_db }
 			else:	
-				self.lines[ int(items[0]) ] = {'command': items[1], 'value': "// " + ":".join(items[2:])}
+				self.addCommand( int(items[0]), {'command': items[1], 'value': "// " + ":".join(items[2:])} )
+				#self.lines[ int(items[0]) ] = {'command': items[1], 'value': "// " + ":".join(items[2:])}
 
 	def getCommands(self):
 		return self.lines

@@ -226,37 +226,38 @@ class HTMLVisualizer(object):
 				self.ln_subs = {}
 
 				if (index + 1) in self.vis_lines:
-					command = self.vis_lines[index + 1]
-					if command['command'] == 'comment':
-						prefix = ""
-						if len(line) > 0:
-							prefix = 3*"&nbsp;"
-						# put comment at the end of the current line
-						clm = len(oline) + 1
-						self.add2lnSubs(clm, len(command['value']), prefix + command['value'])
+					commands = self.vis_lines[index + 1]
+					for command in commands:
+						if command['command'] == 'comment':
+							prefix = ""
+							if len(line) > 0:
+								prefix = 3*"&nbsp;"
+							# put comment at the end of the current line
+							clm = len(oline) + 1
+							self.add2lnSubs(clm, len(command['value']), prefix + command['value'])
 
-					elif command['command'] == 'fold':
-						fold = True
-						fold_start = index + 1
-						fold_end = command['endline']
-						fold_text = self.pretokenize(command['value'])
-						folded = command['folded']
-					elif command['command'] == 'highlight':
-						v_keyword = command['keyword']
-						if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
-							clm = self.src_keywords[ v_keyword ][ index + 1 ]
-							for clm_item in clm:
-								self.add2lnSubs(clm_item, len(v_keyword), self.highlightBox(v_keyword))
-								comment = self.highlightLabel( self.pretokenize(command['value']) )
-								self.add2lnSubs(len(oline)+1, len(comment), comment)
-					elif command['command'] == 'needinfo':
-						v_keyword = command['keyword']
-						if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
-                                                        clm = self.src_keywords[ v_keyword ][ index + 1 ]
-                                                        for clm_item in clm:
-								self.add2lnSubs(clm_item, len(v_keyword), self.needinfoBox(v_keyword, command['attrs']))
-								comment = self.needinfoLabel( self.pretokenize(command['value']) )
-								self.add2lnSubs(len(oline)+1, len(comment), comment)
+						elif command['command'] == 'fold':
+							fold = True
+							fold_start = index + 1
+							fold_end = command['endline']
+							fold_text = self.pretokenize(command['value'])
+							folded = command['folded']
+						elif command['command'] == 'highlight':
+							v_keyword = command['keyword']
+							if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
+								clm = self.src_keywords[ v_keyword ][ index + 1 ]
+								for clm_item in clm:
+									self.add2lnSubs(clm_item, len(v_keyword), self.highlightBox(v_keyword))
+									comment = self.highlightLabel( self.pretokenize(command['value']) )
+									self.add2lnSubs(len(oline)+1, len(comment), comment)
+						elif command['command'] == 'needinfo':
+							v_keyword = command['keyword']
+							if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
+	                                                        clm = self.src_keywords[ v_keyword ][ index + 1 ]
+	                                                        for clm_item in clm:
+									self.add2lnSubs(clm_item, len(v_keyword), self.needinfoBox(v_keyword, command['attrs']))
+									comment = self.needinfoLabel( self.pretokenize(command['value']) )
+									self.add2lnSubs(len(oline)+1, len(comment), comment)
 						
 				for keyword in self.keyworddb:
 					if keyword in line:
