@@ -218,6 +218,8 @@ class HTMLVisualizer(object):
 			fold_end = -1
 			fold_text = ""
 			folded = 0
+			fold_stack = []
+
 	                for index in range(0, count):
 				ln = "%4s" % (index + 1)
 				ln = "<a name='%s'>%s</a>" % (index + 1, ln.replace(' ', "&nbsp;"))
@@ -242,6 +244,10 @@ class HTMLVisualizer(object):
 							fold_end = command['endline']
 							fold_text = self.pretokenize(command['value'])
 							folded = command['folded']
+
+							fold_stack.append( {'id': fold_id, 'start': index + 1, 'end': command['endline'], 'folded': command['folded'], 'label': self.pretokenize(command['value']) } )
+							fold_id = fold_id + 1
+
 						elif command['command'] == 'highlight':
 							v_keyword = command['keyword']
 							if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
@@ -285,22 +291,29 @@ class HTMLVisualizer(object):
 
 				prefix = ""
 				sufix = "<br />"
-				if fold and fold_start == (index + 1):
-					prefix = "<span class='fold_button fold_off fold_off_id_%d' onclick='toggleFold(%d)'>Unfold</span>" % (fold_id, fold_id)
-					prefix = prefix + "<span class='fold_button fold_on fold_on_id_%d' onclick='toggleFold(%d)'>Fold</span>" % (fold_id, fold_id)
-					prefix = prefix + "<span class='fold_text'>%s</span><br />" % fold_text
-					prefix = prefix + "<div class='fold' id='fold_%d'>" % fold_id
+				# get the current fold
+				cfold = []
+				if fold_stack:
+					fold = True
+					cfold = fold_stack[-1]
+				else:
+					fold = False
 
-					if folded:
+				if fold and cfold['start'] == (index + 1):
+					prefix = "<span class='fold_button fold_off fold_off_id_%d' onclick='toggleFold(%d)'>Unfold</span>" % (cfold['id'], cfold['id'])
+					prefix = prefix + "<span class='fold_button fold_on fold_on_id_%d' onclick='toggleFold(%d)'>Fold</span>" % (cfold['id'], cfold['id'])
+					prefix = prefix + "<span class='fold_text'>%s</span><br />" % cfold['label']
+					prefix = prefix + "<div class='fold' id='fold_%d'>" % cfold['id']
+
+					if cfold['folded']:
 						fd.write("<script type='text/javascript'>\n")
-						fd.write("$(document).ready(function() { toggleFold(%d) })\n" % fold_id)
+						fd.write("$(document).ready(function() { toggleFold(%d) })\n" % cfold['id'])
 						fd.write("</script>\n")
 
-					fold_id = fold_id + 1
-
-				if fold and fold_end == (index + 1):
+				if fold and cfold['end'] == (index + 1):
 					sufix = "</div>"
-					fold = False
+					# remove fold from stack
+					del(fold_stack[-1])
 
 	                        fd.write("%s%s %s%s\n" % (prefix, ln, out_line, sufix))
 

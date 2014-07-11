@@ -12,11 +12,11 @@
 # TODO:
 #	[OK] - add keywords coloring
 #	[OK] - add block folding
-#	[  ] - add multilevel block folding
+#	[OK] - add multilevel block folding
 #	[OK] - add autofold from *.vis file
 #	[OK] - add database of keywords description
 #	[  ] - make a search in db more efficient
-#	[  ] - support for multiple commands for single line (nonconflicting commands)
+#	[OK] - support for multiple commands for single line (nonconflicting commands)
 #	[  ] - support for multiline comments on a single line (flowing div)
 #	[  ] - make a call graph for every module (use existing tools)
 #	[  ] - ignore comments (+color them)
@@ -42,6 +42,7 @@
 #	[  ] - if possible link to main function in the file (maybe some content at the begging of the page or floating div
 #	[  ] - automatic code indenting (commands after { has +1 \t character, ...)
 #	[  ] - add support for \t character (multiples of 8?)
+#	[  ] - if a fold contains needinfo, label the fold with needinfo flag
 
 import sys
 import os
