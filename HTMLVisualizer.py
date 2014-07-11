@@ -166,11 +166,20 @@ class HTMLVisualizer(object):
 			pks = 0
 			for p in ks:
 				d_lines.append( (line[pks:p-1], line[pks:p-1]) )
-				#print (pks, p-1, line[pks:p-1], line[pks:p-1])
-				d_lines.append( (line[(p-1):p - 1 + i_points[p]], "".join(i_substs[p]) ) )
-				#print i_substs[p]
-				#print ((p-1), i_points[p], line[(p-1):p - 1 + i_points[p]], "".join(i_substs[p]))
-				#print i_points[p] + p - 1
+				# primarly for more comments at the end of a line
+				# but having more highlighted keywords (needinfo+highligh)
+				jp = "".join(i_substs[p])
+				# THIS IS HACK, HAS TO BE REWRITTEN!!!
+				if len(i_substs[p]) == 2:
+					if "<span class='highlight'>" in jp and "<span class='needinfo'>" in jp:
+						keyword = re.sub(r"<[^>]*>", "", jp)
+						# now the keyword is 2 times duplicated
+						size = len(keyword)
+						keyword = keyword[:size/2]
+						jp = "<span class='highlight'><span class='needinfo'>%s</span></span>" % (keyword)
+
+				d_lines.append( (line[(p-1):p - 1 + i_points[p]], jp ) )
+
 				pks = i_points[p] + p - 1
 			return d_lines
 
