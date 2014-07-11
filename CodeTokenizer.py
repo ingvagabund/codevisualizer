@@ -152,11 +152,12 @@ def getCodeKeywordsOccurences(file):
 			# find the last \n character
 			lnl = tok.value.rfind('\n')
 			ll = len(tok.value)
+			#print(ll, lnl + 1)
 			if ll == (lnl + 1):
 				column_number = 1
 			else:
 				if lnl != -1:
-					column_number = column_number + ll - (lnl + 1)
+					column_number = ll - (lnl + 1) + 1
 				else:
 					column_number = column_number + ll
 		else:
@@ -165,13 +166,16 @@ def getCodeKeywordsOccurences(file):
 				# filter out all language keywords
 
 				# save into db keyword and its line number
-				if repr(tok.value) not in source_code_keywords:
-					source_code_keywords[repr(tok.value)] = {line_number: [column_number]}
-				if line_number not in source_code_keywords[repr(tok.value)]:
-					source_code_keywords[repr(tok.value)][line_number] = [column_number]
-				elif column_number not in source_code_keywords[repr(tok.value)][line_number]:
-					source_code_keywords[repr(tok.value)][line_number].append(column_number)
-					
+				key = repr(tok.value)
+				key = key[1:-1] # get rid of ' char at the beggining and end
+				#print (key, line_number, column_number)
+				if key not in source_code_keywords:
+					source_code_keywords[key] = {line_number: [column_number]}
+				if line_number not in source_code_keywords[key]:
+					source_code_keywords[key][line_number] = [column_number]
+				elif column_number not in source_code_keywords[key][line_number]:
+					source_code_keywords[key][line_number].append(column_number)
+
 			column_number = column_number + len(tok.value)
 
 	#for key in source_code_keywords:

@@ -36,11 +36,12 @@
 #	[  ] - if I move over { sign, highlight the entire {'s block
 #	[  ] - specify for each fold its input and output vars (optionally of course)
 #	[  ] - add a command to specify global variables used in functions (to know what is needed and what can be changed => side effects)
-#	[  ] - do not mark keywords in literals or comments
+#	[OK] - do not mark keywords in literals or comments
 #	[  ] - add mustnotmiss command for very important invocations, ... The entire line must flash or be unoverlookable!!!
 #	[  ] - add something like "the last unfinished source code page" to continue when finished the last time
 #	[  ] - if possible link to main function in the file (maybe some content at the begging of the page or floating div
 #	[  ] - automatic code indenting (commands after { has +1 \t character, ...)
+#	[  ] - add support for \t character (multiples of 8?)
 
 import sys
 import os
@@ -48,6 +49,7 @@ import optparse
 from CodeParser import CodeParser
 from VisualizationParser import VisualizationParser
 from HTMLVisualizer import HTMLVisualizer
+import CodeTokenizer
 
 version = "0.0"
 debug_level = 0
@@ -136,7 +138,10 @@ debug("Visualization file parsed")
 debug("Parsing source code file...")
 codeParser = CodeParser(src_file)
 code_lines = codeParser.getLines()
-debug("Source file parser")
+debug("Source file parsed")
+
+debug("Extracting keywords from source code file")
+code_keywords = CodeTokenizer.getCodeKeywordsOccurences(src_file)
 
 dir_parts = os.path.realpath(__file__).split("/")
 del(dir_parts[-1])
@@ -144,7 +149,7 @@ script_home = "/".join(dir_parts)
 keywords_file = script_home + "/keywords"
 
 debug("Initializing html output...")
-htmlVis = HTMLVisualizer(code_lines, vis_lines, keywords_file, script_home)
+htmlVis = HTMLVisualizer(code_lines, code_keywords, vis_lines, keywords_file, script_home)
 debug("Html output generated")
 htmlVis.printPage(basename, destination)
 debug("Saved to: file://%s" % html_file)

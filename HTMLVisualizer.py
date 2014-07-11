@@ -4,8 +4,9 @@ import shutil
 
 class HTMLVisualizer(object):
 
-	def __init__(self, src_lines, vis_lines, keywords_file, script_dir):
+	def __init__(self, src_lines, src_keywords, vis_lines, keywords_file, script_dir):
 		self.src_lines = src_lines
+		self.src_keywords = src_keywords
 		self.vis_lines = vis_lines
 		self.keywords_file = keywords_file
 		self.layout_dir = "%s/layout" % script_dir
@@ -76,6 +77,22 @@ class HTMLVisualizer(object):
 	def tokenize(self, line):
 		return line.replace('\t', 6*"&nbsp;")
 
+	def postTokenize(self, line):
+		in_tag = 0
+		oline = ""
+		for char in line:
+			if char == ' ' and in_tag == 0:
+					oline = oline + "&nbsp;"
+			else:
+				oline = oline + char
+
+			if char == '<':
+				in_tag = in_tag + 1
+			elif char == '>':
+				in_tag = in_tag - 1
+		
+		return oline
+
 	def colorKeywords(self, line):
 		for keyword in self.keywords:
 			line = re.sub(r"(\s)(%s)(\s)" % keyword, r"\1<span class='%s'>\2</span>\3" % (keyword.replace('#', '')), line)
@@ -100,6 +117,65 @@ class HTMLVisualizer(object):
 		line = line.replace(keyword, "<span class='needinfo'>%s</span>" % lkeyword)
 		return line + "<span class='needinfo_text'><b>NEEDINFO:</b> %s</span>" % value
 
+	def highlightBox(self, keyword):
+		return "<span class='highlight'>%s</span>" % keyword
+
+	def needinfoBox(self, keyword, attrs):
+		lkeyword = keyword
+                if 'link' in attrs:
+                        lkeyword = "<a href='#%s'>%s</a>" % (attrs['link'], keyword)
+
+		return "<span class='needinfo'>%s</span>" % lkeyword
+
+	def highlightLabel(self, value):
+		return "<span class='highlight_text'>%s</span>" % value
+		
+	def needinfoLabel(self, value):
+		return "<span class='needinfo_text'><b>NEEDINFO:</b> %s</span>" % value
+
+	def add2lnSubs(self, clm, size, value):
+		#print "clm: %d" % clm
+		if clm not in self.ln_subs:
+			self.ln_subs[clm] = [(size, value)]
+		else:
+			self.ln_subs[clm].append( (size, value) )
+
+	def decomposeLineForSubs(self, line, points):
+		# get all intersection points
+		i_points = {}
+		i_substs = {}
+		for point in points:
+			sz = 0
+			i_substs[point] = []
+
+			for (size, subs) in points[point]:
+				sz = max(sz, size)
+				if point in i_substs:
+					i_substs[point].append(subs)
+				else:
+					i_substs[point] = [subs]
+
+			i_points[point] = sz
+
+		if i_points:
+			#print i_points
+			ks = sorted(i_points.keys())
+			#print ks
+
+			d_lines = []
+			pks = 0
+			for p in ks:
+				d_lines.append( (line[pks:p-1], line[pks:p-1]) )
+				#print (pks, p-1, line[pks:p-1], line[pks:p-1])
+				d_lines.append( (line[(p-1):p - 1 + i_points[p]], "".join(i_substs[p]) ) )
+				#print i_substs[p]
+				#print ((p-1), i_points[p], line[(p-1):p - 1 + i_points[p]], "".join(i_substs[p]))
+				#print i_points[p] + p - 1
+				pks = i_points[p] + p - 1
+			return d_lines
+
+		return [(line,line)]
+
 	def printPage(self, file, destination):
 
 		with open("%s/%s.html" % (destination, file), 'w') as fd:
@@ -123,6 +199,9 @@ class HTMLVisualizer(object):
 			for key in filekeyworddb:
 				self.keyworddb[key] = filekeyworddb[key]
 
+			#self.src_keywords
+			
+
 			count = len(self.src_lines)
 			fold_id = 1
 			fold = False
@@ -133,15 +212,20 @@ class HTMLVisualizer(object):
 	                for index in range(0, count):
 				ln = "%4s" % (index + 1)
 				ln = "<a name='%s'>%s</a>" % (index + 1, ln.replace(' ', "&nbsp;"))
-				line = self.src_lines[index]
-				line = self.pretokenize(line)
+				oline = line = self.src_lines[index]
+
+				self.ln_subs = {}
 
 				if (index + 1) in self.vis_lines:
 					command = self.vis_lines[index + 1]
 					if command['command'] == 'comment':
+						prefix = ""
 						if len(line) > 0:
-							line = line + 3*"&nbsp;"
-						line = line + "<span class='comment'>%s</span>" % (self.pretokenize(command['value']))
+							prefix = 3*"&nbsp;"
+						# put comment at the end of the current line
+						clm = len(oline) + 1
+						self.add2lnSubs(clm, len(command['value']), prefix + command['value'])
+
 					elif command['command'] == 'fold':
 						fold = True
 						fold_start = index + 1
@@ -149,18 +233,45 @@ class HTMLVisualizer(object):
 						fold_text = self.pretokenize(command['value'])
 						folded = command['folded']
 					elif command['command'] == 'highlight':
-						line = self.highlightKeyword(line, command['keyword'], self.pretokenize(command['value']))
+						v_keyword = command['keyword']
+						if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
+							clm = self.src_keywords[ v_keyword ][ index + 1 ]
+							for clm_item in clm:
+								self.add2lnSubs(clm_item, len(v_keyword), self.highlightBox(v_keyword))
+								comment = self.highlightLabel( self.pretokenize(command['value']) )
+								self.add2lnSubs(len(oline)+1, len(comment), comment)
 					elif command['command'] == 'needinfo':
-	                                        line = self.needinfoKeyword(line, command['keyword'], self.pretokenize(command['value']), command['attrs'])
-				else:
-					line = self.colorLiterals(line)
-					line = self.colorKeywords(line)
+						v_keyword = command['keyword']
+						if v_keyword in self.src_keywords and (index + 1) in self.src_keywords[ v_keyword ]:
+                                                        clm = self.src_keywords[ v_keyword ][ index + 1 ]
+                                                        for clm_item in clm:
+								self.add2lnSubs(clm_item, len(v_keyword), self.needinfoBox(v_keyword, command['attrs']))
+								comment = self.needinfoLabel( self.pretokenize(command['value']) )
+								self.add2lnSubs(len(oline)+1, len(comment), comment)
+						
+				for keyword in self.keyworddb:
+					if keyword in line:
+						clm = self.src_keywords[ keyword ][ index + 1 ]
+						for clm_item in clm:
+							self.add2lnSubs(clm_item, len(keyword), self.highlightBox(keyword))
+							comment = self.highlightLabel( self.pretokenize( self.keyworddb[keyword]) )
+							self.add2lnSubs(len(oline)+1, len(comment), comment)
+							
 
-					for keyword in self.keyworddb:
-						if keyword in line:
-							line = self.highlightKeyword(line, keyword, self.keyworddb[keyword])
+				out_line = []
+				# split the line into pairs of substrings (to replace, replace with
+				d_lines = self.decomposeLineForSubs(oline, self.ln_subs)
 
-				line = self.tokenize(line)
+				for (orig, new) in d_lines:
+					if orig == new:
+						new = self.colorLiterals(orig)
+						new = self.colorKeywords(new)
+						new = self.tokenize(new)
+						new = self.postTokenize(new)
+
+					out_line.append(new)
+				
+				out_line = "".join(out_line)
 
 				prefix = ""
 				sufix = "<br />"
@@ -181,7 +292,7 @@ class HTMLVisualizer(object):
 					sufix = "</div>"
 					fold = False
 
-	                        fd.write("%s%s %s%s\n" % (prefix, ln, line, sufix))
+	                        fd.write("%s%s %s%s\n" % (prefix, ln, out_line, sufix))
 
 			fd.write("</body>\n")
 			fd.write("</html>\n")
