@@ -131,6 +131,7 @@ def t_error(t):
 
 ################################################
 source_code_keywords = {}
+source_code_comments = []
 def getCodeKeywordsOccurences(file):
 	lex.lex()
 
@@ -143,16 +144,32 @@ def getCodeKeywordsOccurences(file):
 	for tok in iter(lex.token, None):
 		#print tok
 		#print repr(tok.type), repr(tok.value), line_number, column_number
-
+		# for each token compute next column_number (not for actual token but for the next)
 		if tok.type == 'COMMENT':
-			line_number = line_number + 1
+			#print line_number, tok.value
+			mcomment = []
+			mcomment.append( (line_number, column_number) )
+			#print (line_number, column_number)
+			#print repr(tok.value)[1:-1]
+			#print (line_number, column_number + len(repr(tok.value)[1:-1]) - 1)
+			mcomment.append( (line_number, column_number + len(repr(tok.value)[1:-1]) - 1) )
+			#print mcomment
+			source_code_comments.append( mcomment )
 			column_number = 1
 		elif tok.type == 'WHITESPACE' or tok.type == 'MCOMMENT':
+			#if tok.type == 'MCOMMENT':
+			#	print line_number
+			mcomment = []
+			if tok.type == 'MCOMMENT':
+				#print "cs: (%d, %d)" % (line_number, column_number)
+				mcomment.append( (line_number, column_number) )
+
 			line_number = line_number + tok.value.count('\n')
 			# find the last \n character
 			lnl = tok.value.rfind('\n')
 			ll = len(tok.value)
 			#print(ll, lnl + 1)
+
 			if ll == (lnl + 1):
 				column_number = 1
 			else:
@@ -160,7 +177,13 @@ def getCodeKeywordsOccurences(file):
 					column_number = ll - (lnl + 1) + 1
 				else:
 					column_number = column_number + ll
+			if tok.type == 'MCOMMENT':
+				#print "ce: (%d, %d)" % (line_number, column_number)
+				mcomment.append( (line_number, column_number) )
+				source_code_comments.append(mcomment)
+				#print mcomment
 		else:
+			#print (line_number, tok.value)
 			# save only identifiers
 			if tok.type == 'IDENTIFIER':
 				# filter out all language keywords
@@ -180,7 +203,7 @@ def getCodeKeywordsOccurences(file):
 
 	#for key in source_code_keywords:
 	#	print "%s (%s)" % (key, str(source_code_keywords[key]))
-	return source_code_keywords
+	return (source_code_keywords, source_code_comments)
 
 if __name__ == "__main__":
 	print getCodeKeywordsOccurences(sys.argv[1])

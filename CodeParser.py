@@ -13,9 +13,9 @@ class CodeParser(object):
 
 		# each line is counted
 		self.lines = []
-		line_counter = 0
+		#line_counter = 0
 		for line in content.split("\n"):
-			line_counter = line_counter + 1
+			#line_counter = line_counter + 1
 			#print "%d: %s" % (line_counter, line)
 			self.lines.append(line)
 

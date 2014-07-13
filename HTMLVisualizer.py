@@ -4,9 +4,10 @@ import shutil
 
 class HTMLVisualizer(object):
 
-	def __init__(self, src_lines, src_keywords, vis_lines, keywords_file, script_dir):
+	def __init__(self, src_lines, src_keywords, src_comments, vis_lines, keywords_file, script_dir):
 		self.src_lines = src_lines
 		self.src_keywords = src_keywords
+		self.src_comments = src_comments
 		self.vis_lines = vis_lines
 		self.keywords_file = keywords_file
 		self.layout_dir = "%s/layout" % script_dir
@@ -105,6 +106,9 @@ class HTMLVisualizer(object):
 		line = re.sub(r'("[^"]*")', r"<span class='str_literal'>\1</span>", line)
 		return line
 
+	def commentBox(self, comment):
+		return "<span class='comment'>%s</span>" % comment
+
 	def highlightKeyword(self, line, keyword, value):
 		line = line.replace(keyword, "<span class='highlight'>%s</span>" % keyword)
 		return line + "<span class='highlight_text'>%s</span>" % value
@@ -141,6 +145,7 @@ class HTMLVisualizer(object):
 			self.ln_subs[clm].append( (size, value) )
 
 	def decomposeLineForSubs(self, line, points):
+		#print line
 		# get all intersection points
 		i_points = {}
 		i_substs = {}
@@ -165,10 +170,13 @@ class HTMLVisualizer(object):
 			d_lines = []
 			pks = 0
 			for p in ks:
+				#print p
 				d_lines.append( (line[pks:p-1], line[pks:p-1]) )
+				#print line[pks:p-1]
 				# primarly for more comments at the end of a line
 				# but having more highlighted keywords (needinfo+highligh)
 				jp = "".join(i_substs[p])
+				#print jp
 				# THIS IS HACK, HAS TO BE REWRITTEN!!!
 				if len(i_substs[p]) == 2:
 					if "<span class='highlight'>" in jp and "<span class='needinfo'>" in jp:
@@ -179,11 +187,26 @@ class HTMLVisualizer(object):
 						jp = "<span class='highlight'><span class='needinfo'>%s</span></span>" % (keyword)
 
 				d_lines.append( (line[(p-1):p - 1 + i_points[p]], jp ) )
-
+				#print d_lines
 				pks = i_points[p] + p - 1
+			# append the last bit of the line
+			d_lines.append( (line[pks:], line[pks:]) )
+			#exit(0)
 			return d_lines
 
 		return [(line,line)]
+
+	def addToCommentsDB(self, line, column, start):
+		if line not in self.comments_db:
+			self.comments_db[line] = [(column, start)]
+		else:
+			self.comments_db[line].append( (column, start) )
+
+	def processComments(self):
+		self.comments_db = {}
+		for [(ls,cs),(le,ce)] in self.src_comments:
+			self.addToCommentsDB(ls, cs, True)
+			self.addToCommentsDB(le, ce, False)
 
 	def printPage(self, file, destination):
 
@@ -220,6 +243,8 @@ class HTMLVisualizer(object):
 			folded = 0
 			fold_stack = []
 
+			self.processComments()
+
 	                for index in range(0, count):
 				ln = "%4s" % (index + 1)
 				ln = "<a name='%s'>%s</a>" % (index + 1, ln.replace(' ', "&nbsp;"))
@@ -231,12 +256,13 @@ class HTMLVisualizer(object):
 					commands = self.vis_lines[index + 1]
 					for command in commands:
 						if command['command'] == 'comment':
+							print index + 1
 							prefix = ""
 							if len(line) > 0:
 								prefix = 3*"&nbsp;"
 							# put comment at the end of the current line
 							clm = len(oline) + 1
-							self.add2lnSubs(clm, len(command['value']), prefix + command['value'])
+							self.add2lnSubs(clm, len(command['value']), prefix + self.commentBox( command['value'] ))
 
 						elif command['command'] == 'fold':
 							fold = True
@@ -279,10 +305,21 @@ class HTMLVisualizer(object):
 						self.add2lnSubs(len(oline)+1, len(comment), comment)
 							
 
+				# color comments
+				if index + 1 in self.comments_db:
+					for (column, start) in self.comments_db[index + 1]:
+						#print (column, start)
+						if start:
+							self.add2lnSubs(column, 0, "<span class='codecomment'>")
+						else:
+							self.add2lnSubs(column, 0, "</span>")
+						#print self.ln_subs[column]
+
 				out_line = []
 				# split the line into pairs of substrings (to replace, replace with
 				d_lines = self.decomposeLineForSubs(oline, self.ln_subs)
-
+				if index + 1 == 72:
+					print d_lines
 				for (orig, new) in d_lines:
 					if orig == new:
 						new = self.colorLiterals(orig)
