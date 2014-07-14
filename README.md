@@ -33,12 +33,14 @@ choose diffrent explanation suited for problem you are solving
 ## Installation
 Clone the repo into a directory. ~/codevisualizer prefered but can be basically anything.
 
-   ```$ git clone https://github.com/ingvagabund/codevisualizer.git
+   ```vim
+   $ git clone https://github.com/ingvagabund/codevisualizer.git
    ```
 
 In the directory run
 
-   ```$ make
+   ```vim
+   $ make
    $ sudo make install
    ```
 
@@ -49,7 +51,8 @@ Description of all options, visualization file format and keywords database is i
 
 Visualization file example:
 
-   ```#### reading config file ####
+   ```vim
+   #### reading config file ####
    827:needinfo:namestore:list of items of config file
    843:comment:~/.manpath
    846:comment:read config file only once
@@ -60,7 +63,8 @@ Visualization file example:
 
 keyworddb example:
 
-   ```#### man-db general functions ####
+   ```vim
+   #### man-db general functions ####
    get_manpath:get all possible man paths (optionally with systems)
    add_nls_manpaths:each  path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)
    locale_manpath:to each path in manpath prepend its localized paths
@@ -69,11 +73,13 @@ keyworddb example:
 ## Launch it
 Already prepared example from man-db source codes
 
-   ```$ visualize --dest=examples examples/manp.c
+   ```vim
+   $ visualize --dest=examples examples/manp.c
    ```
 
 Running with --debug will show you the resulting html file and the visualization process
 
-   ```$ visualize --dest=examples examples/manp.c --debug
+   ```vim
+   $ visualize --dest=examples examples/manp.c --debug
    ```
 
