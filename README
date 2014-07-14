@@ -13,6 +13,8 @@ About
 
        Script is written in Python, using python-ply package.
 
+       Screenshot at https://raw.githubusercontent.com/ingvagabund/codevisualizer/master/examples/example.png
+
 Installation
 	Clone the repo into a directory.
 	In the directory run (make will get pwd and generate visualize script).
