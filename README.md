@@ -56,7 +56,7 @@ Visualization file example:
    827:needinfo:namestore:list of items of config file
    843:comment:~/.manpath
    846:comment:read config file only once
-   850:fold:866:1:read config file from ~/.manpath or user file (user_config_file) through option
+   850:fold:866:1:read config file from ~/.manpath or user file (user_config_file)
    851:comment:NULL if called from manpath
    862:highlight:add_to_dirlist (config, 1):parses config file and calls add functions
    ```
@@ -66,7 +66,7 @@ keyworddb example:
    ```vim
    #### man-db general functions ####
    get_manpath:get all possible man paths (optionally with systems)
-   add_nls_manpaths:each  path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)
+   add_nls_manpaths:each  path in manpath replace by itself plus prepended its ...
    locale_manpath:to each path in manpath prepend its localized paths
    ```
 
