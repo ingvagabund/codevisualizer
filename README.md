@@ -48,9 +48,9 @@ In the directory run
 
 Description of all options, visualization file format and keywords database is in man page
 
-	```vim
-	$ man visualize
-	```
+   ```vim
+   $ man visualize
+   ```
 
 Visualization file example:
 
