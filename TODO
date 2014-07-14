@@ -1,0 +1,34 @@
+[OK] - add keywords coloring
+[OK] - add block folding
+[OK] - add multilevel block folding
+[OK] - add autofold from *.vis file
+[OK] - add database of keywords description
+[  ] - make a search in db more efficient
+[OK] - support for multiple commands for single line (nonconflicting commands)
+[  ] - support for multiline comments on a single line (flowing div)
+[  ] - make a call graph for every module (use existing tools)
+[  ] - ignore comments (+color them)
+[  ] - for each folded block show start and end line number
+[OK] - find a suitable dir for keyword file
+[OK] - install css and js files into dest directory
+[  ] - highlight (silver?) all functions body
+[  ] - make a configuration file (language, colors, function highlighting, conflicts, ...)
+[  ] - add links for keywords (to its function definition for example or a line, ...)
+[  ] - maybe run keyworddb and keyword as a daemon?
+[  ] - concept of hotspots (label prelogue, epilogue, important entry points to other functions) => call/guide graph of control flow
+[  ] - mark which function parametres or in/out/both (only some and defined by user or from comments?)
+[  ] - add support for views (view for db, for configuration, for display, concept explanation, ...)
+[  ] - when keyword specified, it is overwritten by keyword from db, both should be presented
+[  ] - have a default view (first time walkthrough?), additional views rewrittes default one?
+[  ] - what about "*dblookup " keyword? asterix *!!! more like new keyword search algorithm or "*dblookup(", "*dblookup["
+[  ] - add man pages whatis text to each keyword (or as a hidden bubble/text) - as a option to visualize (from 3 and 3p? only)
+[  ] - if I move over { sign, highlight the entire {'s block
+[  ] - specify for each fold its input and output vars (optionally of course)
+[  ] - add a command to specify global variables used in functions (to know what is needed and what can be changed => side effects)
+[OK] - do not mark keywords in literals or comments
+[  ] - add mustnotmiss command for very important invocations, ... The entire line must flash or be unoverlookable!!!
+[  ] - add something like "the last unfinished source code page" to continue when finished the last time
+[  ] - if possible link to main function in the file (maybe some content at the begging of the page or floating div
+[  ] - automatic code indenting (commands after { has +1 \t character, ...)
+[  ] - add support for \t character (multiples of 8?)
+[  ] - if a fold contains needinfo, label the fold with needinfo flag
