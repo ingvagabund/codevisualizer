@@ -256,7 +256,7 @@ class HTMLVisualizer(object):
 					commands = self.vis_lines[index + 1]
 					for command in commands:
 						if command['command'] == 'comment':
-							print index + 1
+							#print index + 1
 							prefix = ""
 							if len(line) > 0:
 								prefix = 3*"&nbsp;"
@@ -318,8 +318,6 @@ class HTMLVisualizer(object):
 				out_line = []
 				# split the line into pairs of substrings (to replace, replace with
 				d_lines = self.decomposeLineForSubs(oline, self.ln_subs)
-				if index + 1 == 72:
-					print d_lines
 				for (orig, new) in d_lines:
 					if orig == new:
 						new = self.colorLiterals(orig)

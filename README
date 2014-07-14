@@ -23,6 +23,11 @@ Installation
 	$ visualize --help
 	$ man visualize
 
+Examples
+	$ visualize --dest=examples examples/manp.c
+	Running with --debug will show resulting html file
+	$ visualize --dest=examples examples/manp.c --debug
+
 Dependency:
 	python ply is needed
 
