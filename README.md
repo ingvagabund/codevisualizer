@@ -31,9 +31,9 @@ choose diffrent explanation suited for problem you are solving
 ![Code visualization](https://raw.githubusercontent.com/ingvagabund/codevisualizer/master/examples/example.png)
 
 ## Installation
-	Clone the repo into a directory. ~/codevisualizer prefered but can be basically anything.
+Clone the repo into a directory. ~/codevisualizer prefered but can be basically anything.
 	$ git clone https://github.com/ingvagabund/codevisualizer.git
-	In the directory run
+In the directory run
 	$ make
 	$ sudo make install
 
@@ -43,24 +43,24 @@ Description of all options, visualization file format and keywords database is i
 	$ man visualize
 
 Visualization file example:
-	#### reading config file ####
-	827:needinfo:namestore:list of items of config file
-	843:comment:~/.manpath
-	846:comment:read config file only once
-	850:fold:866:1:read config file from ~/.manpath or user file (user_config_file) through option
-	851:comment:NULL if called from manpath
-	862:highlight:add_to_dirlist (config, 1):parses config file and calls add functions
+`#### reading config file ####
+`827:needinfo:namestore:list of items of config file
+`843:comment:~/.manpath
+`846:comment:read config file only once
+`850:fold:866:1:read config file from ~/.manpath or user file (user_config_file) through option
+`851:comment:NULL if called from manpath
+`862:highlight:add_to_dirlist (config, 1):parses config file and calls add functions
 
 keyworddb example:
-	#### man-db general functions ####
-	get_manpath:get all possible man paths (optionally with systems)
-	add_nls_manpaths:each  path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)
-	locale_manpath:to each path in manpath prepend its localized paths
+`#### man-db general functions ####
+`get_manpath:get all possible man paths (optionally with systems)
+`add_nls_manpaths:each  path in manpath replace by itself plus prepended its locale paths (locale = languages like fr,de,...)
+`locale_manpath:to each path in manpath prepend its localized paths
 
 
 ## Launch it
 Already prepared example from man-db source codes
-	$ visualize --dest=examples examples/manp.c
+`$ visualize --dest=examples examples/manp.c
 Running with --debug will show you the resulting html file and the visualization process
-	$ visualize --dest=examples examples/manp.c --debug
+`$ visualize --dest=examples examples/manp.c --debug
 
