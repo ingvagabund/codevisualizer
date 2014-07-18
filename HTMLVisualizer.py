@@ -320,7 +320,8 @@ class HTMLVisualizer(object):
 				d_lines = self.decomposeLineForSubs(oline, self.ln_subs)
 				for (orig, new) in d_lines:
 					if orig == new:
-						new = self.colorLiterals(orig)
+						new = self.pretokenize(new)
+						new = self.colorLiterals(new)
 						new = self.colorKeywords(new)
 						new = self.tokenize(new)
 						new = self.postTokenize(new)
