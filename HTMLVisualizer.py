@@ -353,10 +353,17 @@ class HTMLVisualizer(object):
 
 				if fold and cfold['end'] == (index + 1):
 					sufix = "</div>"
-					# remove fold from stack
-					del(fold_stack[-1])
+					while True:
+						# remove fold from stack
+						del(fold_stack[-1])
+						if fold_stack and fold_stack[-1]['end'] == (index + 1):
+							sufix = sufix + "</div>"
+							cfold = fold_stack[-1]
+							continue
+						else:
+							break
 
-	                        fd.write("%s%s %s%s\n" % (prefix, ln, out_line, sufix))
+				fd.write("%s%s %s%s\n" % (prefix, ln, out_line, sufix))
 
 			fd.write("</body>\n")
 			fd.write("</html>\n")
